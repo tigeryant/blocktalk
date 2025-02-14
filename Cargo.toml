@@ -1,0 +1,15 @@
+[package]
+name = "blocktalk"
+version = "0.1.0"
+edition = "2021"
+description = "A wrapper for Bitcoin IPC communication"
+repository = "https://github.com/pseudoramdom/blocktalk"
+readme = "README.md"
+keywords = ["bitcoin", "ipc"]
+
+[build-dependencies]
+capnpc = "0.20.1"
+
+[dependencies]
+capnp = "0.20.3"
+capnp-rpc = "0.20.3"
