@@ -6,10 +6,23 @@ description = "A wrapper for Bitcoin IPC communication"
 repository = "https://github.com/pseudoramdom/blocktalk"
 readme = "README.md"
 keywords = ["bitcoin", "ipc"]
+build = "build.rs"
 
-[build-dependencies]
-capnpc = "0.20.1"
+[[example]]
+name = "monitor"
+path = "examples/monitor.rs"
+
+[[example]]
+name = "chain_query"
+path = "examples/chain_query.rs"
 
 [dependencies]
 capnp = "0.20.3"
 capnp-rpc = "0.20.3"
+tokio = { version = "1.43.0", features = ["full"] }
+tokio-util = { version = "0.7.13", features = ["compat"] }
+async-trait = "0.1"
+bitcoin = "0.32.5"
+
+[build-dependencies]
+capnpc = "0.20.1"
