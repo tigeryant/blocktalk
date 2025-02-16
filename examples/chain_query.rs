@@ -1,22 +1,18 @@
-// use blocktalk::BlockTalk;
+use blocktalk::BlockTalk;
 
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let blocktalk = BlockTalk::connect("/path/to/socket").await?;
-//     let chain = blocktalk.chain();
+#[tokio::main]
+async fn main() -> Result<(), blocktalk::BlockTalkError> {
+    // Initialize BlockTalk by connecting to the Bitcoin node
+    // Typically the socket is in the Bitcoin data directory
+    let socket_path = "../bitcoin/datadir_bdk_wallet/regtest/node.sock";
+    let block_talk = BlockTalk::init(socket_path).await?;
     
-//     // Get current tip
-//     let tip = chain.get_tip().await?;
-//     println!("Current tip: height={}, hash={}", tip.height, tip.hash);
-    
-//     // Get last 10 blocks
-//     for height in (tip.height - 10)..=tip.height {
-//         let block = chain.get_block(height).await?;
-//         println!("Block {} has {} transactions", 
-//             block.block_hash(),
-//             block.txdata.len()
-//         );
-//     }
-    
-//     Ok(())
-// }
+    // Get a reference to the chain interface
+    let chain = block_talk.chain();
+
+    // Get the current tip information
+    let (tip_height, tip_hash) = chain.get_tip().await?;
+    println!("Current tip - Height: {}, Hash: {:?}", tip_height, &tip_hash);
+
+    Ok(())
+}

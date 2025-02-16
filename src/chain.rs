@@ -1,38 +1,37 @@
-use crate::{chain_capnp::chain::Client as ChainClient, BlockTalkError, Connection};
+use crate::{
+    chain_capnp::chain::Client as ChainClient,
+    BlockTalkError,
+    Connection,
+    notification::{ChainNotificationHandler, NotificationHandler},
+};
 use std::sync::Arc;
-use tokio::sync::broadcast;
 
-/// Represents a block notification event
-#[derive(Clone, Debug)]
-pub struct BlockNotification {
-    pub height: u32,
-    pub hash: Vec<u8>,
-    pub time: u64,
-}
-
-/// High-level interface for interacting with the blockchain
 pub struct ChainInterface {
     chain_client: ChainClient,
-    notification_publisher: broadcast::Sender<BlockNotification>,
+    notification_handler: ChainNotificationHandler,
 }
 
 impl ChainInterface {
-    /// Create a new ChainInterface from an existing Connection
     pub fn new(connection: Arc<Connection>) -> Self {
-        let (notification_publisher, _) = broadcast::channel(100);
         Self {
             chain_client: connection.chain_client().clone(),
-            notification_publisher,
+            notification_handler: ChainNotificationHandler::new(),
         }
     }
 
-    /// Create a new ChainInterface from just a ChainClient
     pub fn from_client(chain_client: ChainClient) -> Self {
-        let (notification_publisher, _) = broadcast::channel(100);
         Self {
             chain_client,
-            notification_publisher,
+            notification_handler: ChainNotificationHandler::new(),
         }
+    }
+
+    pub fn register_handler(&mut self, handler: Box<dyn NotificationHandler>) {
+        self.notification_handler.register_handler(handler);
+    }
+
+    pub fn notification_handler(&self) -> &ChainNotificationHandler {
+        &self.notification_handler
     }
 
     /// Get the current tip block's height and hash
@@ -101,10 +100,5 @@ impl ChainInterface {
         } else {
             Ok(Some(ancestor.to_vec()))
         }
-    }
-
-    /// Subscribe to block notifications
-    pub fn subscribe(&self) -> broadcast::Receiver<BlockNotification> {
-        self.notification_publisher.subscribe()
     }
 }
