@@ -37,11 +37,23 @@ impl ChainInterface {
     /// Get the current tip block's height and hash
     pub async fn get_tip(&self) -> Result<(i32, Vec<u8>), BlockTalkError> {
         let height = {
+            println!("get_tip: Building height request");
             let request = self.chain_client.get_height_request();
-            let response = request.send().promise.await?;
+            println!("get_tip: Built height request");
+            
+            println!("get_tip: Sending height request");
+            let promise = request.send().promise;
+            println!("get_tip: Request sent, awaiting response");
+            
+            let response = promise.await?;
+            println!("get_tip: Received height response");
+            
             let height_result = response.get()?;
+            println!("get_tip: Parsed height response");
             height_result.get_result()
         };
+
+        println!("Height: {}", height);
 
         let hash = {
             let mut request = self.chain_client.get_block_hash_request();
@@ -49,6 +61,8 @@ impl ChainInterface {
             let response = request.send().promise.await?;
             response.get()?.get_result()?.to_vec()
         };
+
+        println!("hash: {:?}", hash);
 
         Ok((height, hash))
     }

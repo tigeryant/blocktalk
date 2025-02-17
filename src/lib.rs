@@ -37,4 +37,16 @@ impl BlockTalk {
     pub fn chain(&self) -> &Arc<ChainInterface> {
         &self.chain
     }
+
+    /// Disconnect from the node
+    pub async fn disconnect(self) -> Result<(), BlockTalkError> {
+        // Check if we're the last owner of the connection
+        match Arc::try_unwrap(self.connection) {
+            Ok(conn) => conn.disconnect().await,
+            Err(_) => {
+                // There are other references to the connection still alive
+                Ok(())
+            }
+        }
+    }
 }
