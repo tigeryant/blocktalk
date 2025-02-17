@@ -1,5 +1,6 @@
 use crate::{
     chain_capnp::chain::Client as ChainClient,
+    proxy_capnp::thread::Client as ThreadClient,
     BlockTalkError,
     Connection,
     notification::{ChainNotificationHandler, NotificationHandler},
@@ -8,6 +9,7 @@ use std::sync::Arc;
 
 pub struct ChainInterface {
     chain_client: ChainClient,
+    thread: ThreadClient,
     notification_handler: ChainNotificationHandler,
 }
 
@@ -15,13 +17,15 @@ impl ChainInterface {
     pub fn new(connection: Arc<Connection>) -> Self {
         Self {
             chain_client: connection.chain_client().clone(),
+            thread: connection.thread().clone(),
             notification_handler: ChainNotificationHandler::new(),
         }
     }
 
-    pub fn from_client(chain_client: ChainClient) -> Self {
+    pub fn from_client(chain_client: ChainClient, thread: ThreadClient) -> Self {
         Self {
             chain_client,
+            thread,
             notification_handler: ChainNotificationHandler::new(),
         }
     }
@@ -38,8 +42,11 @@ impl ChainInterface {
     pub async fn get_tip(&self) -> Result<(i32, Vec<u8>), BlockTalkError> {
         let height = {
             println!("get_tip: Building height request");
-            let request = self.chain_client.get_height_request();
-            println!("get_tip: Built height request");
+            let mut request = self.chain_client.get_height_request();
+            
+            // Set thread context
+            request.get().get_context()?.set_thread(self.thread.clone());
+            println!("get_tip: Built height request with thread context");
             
             println!("get_tip: Sending height request");
             let promise = request.send().promise;
@@ -57,6 +64,8 @@ impl ChainInterface {
 
         let hash = {
             let mut request = self.chain_client.get_block_hash_request();
+            // Set thread context
+            request.get().get_context()?.set_thread(self.thread.clone());
             request.get().set_height(height);
             let response = request.send().promise.await?;
             response.get()?.get_result()?.to_vec()
@@ -73,6 +82,8 @@ impl ChainInterface {
         height: i32,
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
         let mut request = self.chain_client.get_block_hash_request();
+        // Set thread context
+        request.get().get_context()?.set_thread(self.thread.clone());
         request.get().set_height(height);
         let response = request.send().promise.await?;
 
@@ -87,6 +98,8 @@ impl ChainInterface {
     /// Check if a block is in the best chain
     pub async fn is_in_best_chain(&self, block_hash: &[u8]) -> Result<bool, BlockTalkError> {
         let mut request = self.chain_client.find_block_request();
+        // Set thread context
+        request.get().get_context()?.set_thread(self.thread.clone());
         request.get().set_hash(block_hash);
         let response = request.send().promise.await?;
         let block_info = response.get()?.get_block()?;
@@ -101,6 +114,8 @@ impl ChainInterface {
         block2_hash: &[u8],
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
         let mut request = self.chain_client.find_common_ancestor_request();
+        // Set thread context
+        request.get().get_context()?.set_thread(self.thread.clone());
         {
             let mut params = request.get();
             params.set_block_hash1(block1_hash);
