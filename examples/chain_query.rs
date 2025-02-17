@@ -6,7 +6,7 @@ async fn main() -> Result<(), blocktalk::BlockTalkError> {
     // Typically the socket is in the Bitcoin data directory
     let socket_path = "../bitcoin/datadir_bdk_wallet/regtest/node.sock";
     let block_talk = BlockTalk::init(socket_path).await?;
-    
+    println!("Connected");
     // Get a reference to the chain interface
     let chain = block_talk.chain();
 

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, LocalSet};
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
@@ -20,52 +20,67 @@ pub struct Connection {
 impl Connection {
     /// Create a new connection to the Bitcoin node
     pub async fn connect(socket_path: &str) -> Result<Arc<Self>, BlockTalkError> {
-        // Connect to the Unix socket
-        let stream = tokio::net::UnixStream::connect(socket_path).await?;
-        let (reader, writer) = stream.into_split();
+        // Create a LocalSet for running local tasks
+        let local = LocalSet::new();
         
-        // Set up the RPC network
-        let network = Box::new(twoparty::VatNetwork::new(
-            reader.compat(),
-            writer.compat_write(),
-            rpc_twoparty_capnp::Side::Client,
-            Default::default(),
-        ));
+        // Run the connection setup in the local set
+        let connection = local.run_until(async {
+            // Connect to the Unix socket
+            let stream = tokio::net::UnixStream::connect(socket_path).await?;
+            let (reader, writer) = stream.into_split();
+            
+            // Set up the RPC network
+            let network = Box::new(twoparty::VatNetwork::new(
+                reader.compat(),
+                writer.compat_write(),
+                rpc_twoparty_capnp::Side::Client,
+                Default::default(),
+            ));
 
-        // Initialize RPC system
-        let mut rpc = RpcSystem::new(network, None);
-        let init_interface: InitClient = rpc.bootstrap(rpc_twoparty_capnp::Side::Server);
-        let disconnector = rpc.get_disconnector();
-        let rpc_handle = tokio::task::spawn_local(rpc);
+            // Initialize RPC system
+            let mut rpc = RpcSystem::new(network, None);
+            let init_interface: InitClient = rpc.bootstrap(rpc_twoparty_capnp::Side::Server);
+            let disconnector = rpc.get_disconnector();
+            
+            // Now we can safely use spawn_local since we're inside a LocalSet
+            let rpc_handle = tokio::task::spawn_local(rpc);
 
-        // Get thread client
-        let mk_init_req = init_interface.construct_request();
-        let response = mk_init_req.send().promise.await?;
-        let thread_map = response.get()?.get_thread_map()?;
-        let mk_thread_req = thread_map.make_thread_request();
-        let response = mk_thread_req.send().promise.await?;
-        let thread = response.get()?.get_result()?;
+            // Get thread client
+            let mk_init_req = init_interface.construct_request();
+            let response = mk_init_req.send().promise.await?;
+            let thread_map = response.get()?.get_thread_map()?;
+            let mk_thread_req = thread_map.make_thread_request();
+            let response = mk_thread_req.send().promise.await?;
+            let thread = response.get()?.get_result()?;
 
-        // Set up chain client
-        let mut mk_chain_req = init_interface.make_chain_request();
-        mk_chain_req.get().get_context()?.set_thread(thread.clone());
-        let response = mk_chain_req.send().promise.await?;
-        let chain_client = response.get()?.get_result()?;
+            // Set up chain client
+            let mut mk_chain_req = init_interface.make_chain_request();
+            mk_chain_req.get().get_context()?.set_thread(thread.clone());
+            let response = mk_chain_req.send().promise.await?;
+            let chain_client = response.get()?.get_result()?;
 
-        Ok(Arc::new(Self {
-            rpc_handle,
-            disconnector,
-            thread,
-            chain_client,
-        }))
+            Ok::<_, BlockTalkError>(Arc::new(Self {
+                rpc_handle,
+                disconnector,
+                thread,
+                chain_client,
+            }))
+        }).await?;
+
+        Ok(connection)
     }
 
     /// Disconnect from the node
     pub async fn disconnect(self) -> Result<(), BlockTalkError> {
-        self.disconnector.await.map_err(BlockTalkError::ConnectionError)?;
-        self.rpc_handle.await.map_err(|e| BlockTalkError::NodeError(e.to_string()))?
-            .map_err(BlockTalkError::ConnectionError)?;
-        Ok(())
+        // Create a LocalSet for cleanup
+        let local = LocalSet::new();
+        
+        local.run_until(async {
+            self.disconnector.await.map_err(BlockTalkError::ConnectionError)?;
+            self.rpc_handle.await.map_err(|e| BlockTalkError::NodeError(e.to_string()))?
+                .map_err(BlockTalkError::ConnectionError)?;
+            Ok(())
+        }).await
     }
 
     /// Get a reference to the chain client
