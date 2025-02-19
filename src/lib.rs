@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use log;
 
 mod error;
 mod chain;
@@ -21,12 +22,11 @@ pub struct BlockTalk {
 impl BlockTalk {
     /// Initialize BlockTalk by connecting to a Bitcoin node through the specified socket
     pub async fn init(socket_path: &str) -> Result<Self, BlockTalkError> {
-        // Establish connection to the node
+        log::info!("Initializing BlockTalk with socket path: {}", socket_path);
         let connection = Connection::connect(socket_path).await?;
-        
-        // Create chain interface
         let chain = Arc::new(ChainInterface::new(connection.clone()));
-        
+        log::info!("BlockTalk initialized successfully");
+
         Ok(Self {
             connection,
             chain,
