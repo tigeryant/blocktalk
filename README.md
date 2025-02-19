@@ -19,4 +19,4 @@ MIT License
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Acknowledgements 
-This project is based on Antoine Poinsot's [protoype](https://github.com/darosior/core_bdk_wallet) 
+This project is heavily inspired by Antoine Poinsot's [prototype](https://github.com/darosior/core_bdk_wallet) which is based on @ryanofsky's work on [Multiprocess Bitcoin Design Document](https://github.com/ryanofsky/bitcoin/blob/pr/ipc/doc/design/multiprocess.md)
