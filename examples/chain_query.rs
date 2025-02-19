@@ -72,9 +72,26 @@ async fn main() -> Result<(), blocktalk::BlockTalkError> {
             }
         }
 
-        println!("Disconnecting...");
-        blocktalk.disconnect().await?;
-        println!("Disconnected successfully");
+        println!("Attempting to get block at height 0...");
+        match tokio::time::timeout(Duration::from_secs(5), blocktalk.chain().get_block_at_height(0)).await {
+            Ok(result) => {
+                match result {
+                    Ok(block) => {
+                        println!("Success! Block at height 0: {:?}", block);
+                    },
+                    Err(e) => {
+                        println!("Error getting block at height 0 {:?}", e);
+                    }
+                }
+            },
+            Err(_) => {
+                println!("Error: Request timed out after 5 seconds");
+            }
+        }
+
+        // println!("Disconnecting...");
+        // blocktalk.disconnect().await?;
+        // println!("Disconnected successfully");
         
         Ok(())
     }).await

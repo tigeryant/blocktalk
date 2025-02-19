@@ -42,14 +42,13 @@ impl ChainInterface {
     pub async fn get_tip(&self) -> Result<(i32, Vec<u8>), BlockTalkError> {
         let height = {
             println!("get_tip: Building height request");
-            let mut request = self.chain_client.get_height_request();
+            let mut height_req = self.chain_client.get_height_request();
             
-            // Set thread context
-            request.get().get_context()?.set_thread(self.thread.clone());
+            height_req.get().get_context()?.set_thread(self.thread.clone());
             println!("get_tip: Built height request with thread context");
             
             println!("get_tip: Sending height request");
-            let promise = request.send().promise;
+            let promise = height_req.send().promise;
             println!("get_tip: Request sent, awaiting response");
             
             let response = promise.await?;
@@ -63,11 +62,10 @@ impl ChainInterface {
         println!("Height: {}", height);
 
         let hash = {
-            let mut request = self.chain_client.get_block_hash_request();
-            // Set thread context
-            request.get().get_context()?.set_thread(self.thread.clone());
-            request.get().set_height(height);
-            let response = request.send().promise.await?;
+            let mut hash_req = self.chain_client.get_block_hash_request();
+            hash_req.get().get_context()?.set_thread(self.thread.clone());
+            hash_req.get().set_height(height);
+            let response = hash_req.send().promise.await?;
             response.get()?.get_result()?.to_vec()
         };
 
@@ -81,11 +79,10 @@ impl ChainInterface {
         &self,
         height: i32,
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
-        let mut request = self.chain_client.get_block_hash_request();
-        // Set thread context
-        request.get().get_context()?.set_thread(self.thread.clone());
-        request.get().set_height(height);
-        let response = request.send().promise.await?;
+        let mut hash_req = self.chain_client.get_block_hash_request();
+        hash_req.get().get_context()?.set_thread(self.thread.clone());
+        hash_req.get().set_height(height);
+        let response = hash_req.send().promise.await?;
 
         // If block doesn't exist at this height, return None
         if response.get()?.get_result()?.is_empty() {
@@ -97,11 +94,10 @@ impl ChainInterface {
 
     /// Check if a block is in the best chain
     pub async fn is_in_best_chain(&self, block_hash: &[u8]) -> Result<bool, BlockTalkError> {
-        let mut request = self.chain_client.find_block_request();
-        // Set thread context
-        request.get().get_context()?.set_thread(self.thread.clone());
-        request.get().set_hash(block_hash);
-        let response = request.send().promise.await?;
+        let mut find_req = self.chain_client.find_block_request();
+        find_req.get().get_context()?.set_thread(self.thread.clone());
+        find_req.get().set_hash(block_hash);
+        let response = find_req.send().promise.await?;
         let block_info = response.get()?.get_block()?;
 
         Ok(block_info.get_in_active_chain() != 0)
@@ -113,15 +109,14 @@ impl ChainInterface {
         block1_hash: &[u8],
         block2_hash: &[u8],
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
-        let mut request = self.chain_client.find_common_ancestor_request();
-        // Set thread context
-        request.get().get_context()?.set_thread(self.thread.clone());
+        let mut find_req = self.chain_client.find_common_ancestor_request();
+        find_req.get().get_context()?.set_thread(self.thread.clone());
         {
-            let mut params = request.get();
+            let mut params = find_req.get();
             params.set_block_hash1(block1_hash);
             params.set_block_hash2(block2_hash);
         }
-        let response = request.send().promise.await?;
+        let response = find_req.send().promise.await?;
 
         let ancestor = response.get()?.get_ancestor()?.get_data()?;
         if ancestor.is_empty() {
