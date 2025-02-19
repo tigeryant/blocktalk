@@ -8,13 +8,17 @@ readme = "README.md"
 keywords = ["bitcoin", "ipc"]
 build = "build.rs"
 
+[lib]
+name = "blocktalk"
+path = "src/lib.rs"
+
 [[example]]
 name = "monitor"
 path = "examples/monitor.rs"
 
 [[example]]
 name = "chain_query"
-path = "examples/chain_query.rs"
+path = "example/chain_query.rs"
 
 [dependencies]
 capnp = "0.20.3"
