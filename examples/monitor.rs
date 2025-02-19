@@ -29,16 +29,16 @@
 // #[tokio::main]
 // async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //     let blocktalk = BlockTalk::connect("/path/to/socket").await?;
-    
+
 //     // Get current height
 //     let tip = blocktalk.chain().get_tip().await?;
 //     let monitor = BlockMonitor {
 //         latest_height: Arc::new(Mutex::new(tip.height)),
 //     };
-    
+
 //     // Register for notifications
 //     blocktalk.register_notifications(monitor).await?;
-    
+
 //     // Keep the program running
 //     loop {
 //         tokio::time::sleep(std::time::Duration::from_secs(1)).await;

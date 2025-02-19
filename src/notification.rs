@@ -1,6 +1,6 @@
-use bitcoin::{Block, BlockHash, Transaction, Txid, consensus::Decodable};
-use async_trait::async_trait;
 use crate::error::BlockTalkError;
+use async_trait::async_trait;
+use bitcoin::{Block, BlockHash, Transaction, Txid};
 
 // Public interface
 #[derive(Clone, Debug)]
@@ -15,7 +15,10 @@ pub enum ChainNotification {
 
 #[async_trait]
 pub trait NotificationHandler: Send + Sync {
-    async fn handle_notification(&self, notification: ChainNotification) -> Result<(), BlockTalkError>;
+    async fn handle_notification(
+        &self,
+        notification: ChainNotification,
+    ) -> Result<(), BlockTalkError>;
 }
 
 pub struct ChainNotificationHandler {
@@ -33,11 +36,21 @@ impl ChainNotificationHandler {
         self.handlers.push(handler);
     }
 
-    async fn dispatch_notification(&self, notification: ChainNotification) -> Result<(), BlockTalkError> {
+    #[allow(dead_code)]
+    async fn dispatch_notification(
+        &self,
+        notification: ChainNotification,
+    ) -> Result<(), BlockTalkError> {
         for handler in &self.handlers {
             handler.handle_notification(notification.clone()).await?;
         }
         Ok(())
+    }
+}
+
+impl Default for ChainNotificationHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -46,7 +59,7 @@ impl ChainNotificationHandler {
 // mod internal {
 //     use super::*;
 //     use crate::chain_capnp::chain_notifications::*;
-    
+
 //     #[async_trait]
 //     pub trait CapnpNotificationHandler {
 //         async fn handle_block_connected(
@@ -144,7 +157,7 @@ impl ChainNotificationHandler {
 //         params: T,
 //         handler_fn: F,
 //         results: capnp::capability::Response<R>,
-//     ) -> Result<(), capnp::Error> 
+//     ) -> Result<(), capnp::Error>
 //     where
 //         T: Send + 'static,
 //         F: FnOnce(&ChainNotificationHandler, T) -> Pin<Box<dyn Future<Output = Result<(), BlockTalkError>> + Send>> + Send,

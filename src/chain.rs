@@ -1,12 +1,10 @@
 use std::sync::Arc;
-use log;
 
 use crate::{
     chain_capnp::chain::Client as ChainClient,
-    proxy_capnp::thread::Client as ThreadClient,
-    BlockTalkError,
-    Connection,
     notification::{ChainNotificationHandler, NotificationHandler},
+    proxy_capnp::thread::Client as ThreadClient,
+    BlockTalkError, Connection,
 };
 
 pub struct ChainInterface {
@@ -46,7 +44,10 @@ impl ChainInterface {
         let height = {
             log::trace!("Sending height request");
             let mut height_req = self.chain_client.get_height_request();
-            height_req.get().get_context()?.set_thread(self.thread.clone());
+            height_req
+                .get()
+                .get_context()?
+                .set_thread(self.thread.clone());
             let promise = height_req.send().promise;
             let response = promise.await?;
             let height_result = response.get()?;
@@ -55,7 +56,10 @@ impl ChainInterface {
 
         let hash = {
             let mut hash_req = self.chain_client.get_block_hash_request();
-            hash_req.get().get_context()?.set_thread(self.thread.clone());
+            hash_req
+                .get()
+                .get_context()?
+                .set_thread(self.thread.clone());
             hash_req.get().set_height(height);
             let response = hash_req.send().promise.await?;
             response.get()?.get_result()?.to_vec()
@@ -63,7 +67,11 @@ impl ChainInterface {
 
         log::trace!("Chain tip height: {}", height);
         log::trace!("Chain tip hash: {:?}", hash);
-        log::debug!("Retrieved chain tip at height {} with hash of {} bytes", height, hash.len());
+        log::debug!(
+            "Retrieved chain tip at height {} with hash of {} bytes",
+            height,
+            hash.len()
+        );
 
         Ok((height, hash))
     }
@@ -75,7 +83,10 @@ impl ChainInterface {
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
         log::debug!("Getting block hash at height {}", height);
         let mut hash_req = self.chain_client.get_block_hash_request();
-        hash_req.get().get_context()?.set_thread(self.thread.clone());
+        hash_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
         hash_req.get().set_height(height);
         let response = hash_req.send().promise.await?;
 
@@ -96,13 +107,23 @@ impl ChainInterface {
     pub async fn is_in_best_chain(&self, block_hash: &[u8]) -> Result<bool, BlockTalkError> {
         log::debug!("Checking if block is in best chain");
         let mut find_req = self.chain_client.find_block_request();
-        find_req.get().get_context()?.set_thread(self.thread.clone());
+        find_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
         find_req.get().set_hash(block_hash);
         let response = find_req.send().promise.await?;
         let block_info = response.get()?.get_block()?;
         let is_active = block_info.get_in_active_chain() != 0;
-        
-        log::debug!("Block is {} in the active chain", if is_active { "included" } else { "not included" });
+
+        log::debug!(
+            "Block is {} in the active chain",
+            if is_active {
+                "included"
+            } else {
+                "not included"
+            }
+        );
         Ok(is_active)
     }
 
@@ -114,7 +135,10 @@ impl ChainInterface {
     ) -> Result<Option<Vec<u8>>, BlockTalkError> {
         log::debug!("Finding common ancestor between two blocks");
         let mut find_req = self.chain_client.find_common_ancestor_request();
-        find_req.get().get_context()?.set_thread(self.thread.clone());
+        find_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
         {
             let mut params = find_req.get();
             params.set_block_hash1(block1_hash);

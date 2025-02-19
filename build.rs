@@ -3,7 +3,7 @@ fn main() {
     println!("cargo:warning=Output directory: {}", out_dir);
 
     println!("cargo:rerun-if-changed=schema");
-    
+
     capnpc::CompilerCommand::new()
         .src_prefix("schema")
         .output_path(&out_dir)

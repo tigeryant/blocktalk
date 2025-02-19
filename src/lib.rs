@@ -1,16 +1,15 @@
 use std::sync::Arc;
-use log;
 
-mod error;
 mod chain;
 mod connection;
-mod notification;
+mod error;
 mod generated;
+mod notification;
 
-pub use generated::*;
-pub use error::BlockTalkError;
-pub use connection::Connection;
 pub use chain::ChainInterface;
+pub use connection::Connection;
+pub use error::BlockTalkError;
+pub use generated::*;
 
 #[derive(Clone)]
 /// Main entry point for blockchain interaction
@@ -27,12 +26,9 @@ impl BlockTalk {
         let chain = Arc::new(ChainInterface::new(connection.clone()));
         log::info!("BlockTalk initialized successfully");
 
-        Ok(Self {
-            connection,
-            chain,
-        })
+        Ok(Self { connection, chain })
     }
-    
+
     /// Get a reference to the chain interface
     pub fn chain(&self) -> &Arc<ChainInterface> {
         &self.chain
