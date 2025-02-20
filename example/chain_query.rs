@@ -2,7 +2,7 @@ use blocktalk::{BlockTalk, BlockTalkError};
 use std::path::Path;
 use std::time::Duration;
 use tokio::task::LocalSet;
-use bitcoin::BlockHash;
+use bitcoin::{BlockHash, Block};
 
 #[tokio::main]
 async fn main() -> Result<(), BlockTalkError> {
@@ -26,6 +26,9 @@ async fn main() -> Result<(), BlockTalkError> {
         let genesis_hash = query_genesis_block(chain).await;
         
         if let Some(genesis) = genesis_hash {
+            // Retrieve the full genesis block
+            get_block_details(chain, &genesis).await;
+            
             // Only run this if we got the tip and genesis successfully
             if let Ok((_, tip_hash)) = chain.get_tip().await {
                 find_common_ancestor(chain, &tip_hash, &genesis).await;
@@ -125,6 +128,70 @@ async fn query_genesis_block(chain: &blocktalk::ChainInterface) -> Option<BlockH
         Err(_) => {
             println!("Request timed out after 5 seconds");
             None
+        }
+    }
+}
+
+/// Gets and displays full block details using the get_block_by_hash method
+async fn get_block_details(chain: &blocktalk::ChainInterface, block_hash: &BlockHash) {
+    println!("\nFetching full block details for {}...", block_hash);
+    match tokio::time::timeout(
+        Duration::from_secs(5),
+        chain.get_block_by_hash(block_hash),
+    ).await {
+        Ok(Ok(Some(block))) => {
+            println!("Block details:");
+            println!("  Version: {:?}", block.header.version);
+            println!("  Previous block hash: {}", block.header.prev_blockhash);
+            println!("  Merkle root: {}", block.header.merkle_root);
+            println!("  Timestamp: {}", 
+                block.header.time,
+            );
+            println!("  Bits: 0x{:x}", block.header.bits);
+            println!("  Nonce: {}", block.header.nonce);
+            println!("  Transaction count: {}", block.txdata.len());
+            
+            // Display first few transactions
+            if !block.txdata.is_empty() {
+                let count = std::cmp::min(3, block.txdata.len());
+                println!("  First {} transaction(s):", count);
+                for (i, tx) in block.txdata.iter().take(count).enumerate() {
+                    println!("    {}. TXID: {}", i+1, tx.txid());
+                    println!("       Input count: {}", tx.input.len());
+                    println!("       Output count: {}", tx.output.len());
+                    
+                    // Show a sample of transaction outputs if present
+                    if !tx.output.is_empty() {
+                        let sample_output = &tx.output[0];
+                        println!("       Sample output: {} satoshis", sample_output.value);
+                        if tx.is_coinbase() {
+                            println!("       This is a coinbase transaction");
+                        }
+                    }
+                }
+                
+                if block.txdata.len() > count {
+                    println!("    ... and {} more transaction(s)", block.txdata.len() - count);
+                }
+            }
+            
+            // Calculate block size
+            let serialized_size = bitcoin::consensus::serialize(&block).len();
+            println!("  Block size: {} bytes", serialized_size);
+            
+            // Show block weight if it's a segwit block
+            // if block.weight() != serialized_size * 4 {
+            //     println!("  Block weight: {} weight units (segwit)", block.weight());
+            // }
+        }
+        Ok(Ok(None)) => {
+            println!("Block not found!");
+        }
+        Ok(Err(e)) => {
+            println!("Error fetching block: {}", e);
+        }
+        Err(_) => {
+            println!("Request timed out after 5 seconds");
         }
     }
 }

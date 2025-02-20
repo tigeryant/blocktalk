@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use bitcoin::{Block, BlockHash, Transaction, Txid};
+use bitcoin::{Block, BlockHash};
 use bitcoin::hashes::Hash;
 
 use crate::{
@@ -167,6 +167,41 @@ impl ChainInterface {
             let ancestor_hash = self.bytes_to_block_hash(ancestor_bytes)?;
             log::debug!("Common ancestor found: {}", ancestor_hash);
             Ok(Some(ancestor_hash))
+        }
+    }
+    
+    /// Get a full block by its hash
+    pub async fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, BlockTalkError> {
+        log::debug!("Getting block with hash {}", block_hash);
+        let hash_bytes = block_hash.to_raw_hash().to_byte_array();
+        
+        // Use find_block_request instead, as get_block_request is not available
+        let mut find_req = self.chain_client.find_block_request();
+        find_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
+        find_req.get().set_hash(&hash_bytes);
+        
+        let response = find_req.send().promise.await?;
+        
+        // Check if the block was found
+        let block_info = response.get()?.get_block()?;
+        if block_info.get_data()?.is_empty() {
+            log::debug!("No block found with hash {}", block_hash);
+            return Ok(None);
+        }
+        
+        // Parse the block data
+        match bitcoin::consensus::deserialize::<Block>(block_info.get_data()?) {
+            Ok(block) => {
+                log::debug!("Successfully retrieved block {}", block_hash);
+                Ok(Some(block))
+            },
+            Err(e) => {
+                log::error!("Failed to parse block data: {}", e);
+                Err(BlockTalkError::InvalidBlockData)
+            }
         }
     }
     
