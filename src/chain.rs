@@ -32,12 +32,37 @@ impl ChainInterface {
         }
     }
 
-    pub fn register_handler(&mut self, handler: Box<dyn NotificationHandler>) {
+    pub fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) {
         self.notification_handler.register_handler(handler);
     }
 
     pub fn notification_handler(&self) -> &ChainNotificationHandler {
         &self.notification_handler
+    }
+
+    pub async fn subscribe_to_notifications(&self) -> Result<(), BlockTalkError> {
+        log::debug!("Subscribing to chain notifications");
+        
+        // Create notification client from our handler
+        let notification_client = capnp_rpc::new_client(self.notification_handler.clone());
+        
+        // Create request to handle notifications (method from your reference implementation)
+        let mut handle_req = self.chain_client.handle_notifications_request();
+        
+        // Set thread context
+        handle_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
+            
+        // Set the notification handler
+        handle_req.get().set_notifications(notification_client);
+        
+        // Send registration request
+        let _ = handle_req.send().promise.await?;
+        
+        log::info!("Successfully subscribed to chain notifications");
+        Ok(())
     }
 
     /// Get the current tip block's height and hash
@@ -187,8 +212,8 @@ impl ChainInterface {
         
         // Check if the block was found
         let block_info = response.get()?.get_block()?;
-        if block_info.get_data()?.is_empty() {
-            log::debug!("No block found with hash {}", block_hash);
+        if !block_info.has_data() || block_info.get_data()?.is_empty() {
+            log::debug!("No block data found for hash {}", block_hash);
             return Ok(None);
         }
         

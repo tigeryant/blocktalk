@@ -1,26 +1,39 @@
 // // examples/monitor.rs
-// use blocktalk::{BlockTalk, NotificationHandler, ChainNotification};
+// use blocktalk::{BlockTalk, NotificationHandler, ChainNotification, BlockTalkError};
 // use async_trait::async_trait;
 // use std::sync::Arc;
 // use tokio::sync::Mutex;
 
 // struct BlockMonitor {
-//     latest_height: Arc<Mutex<u32>>,
+//     latest_height: Arc<Mutex<i32>>,
 // }
 
 // #[async_trait]
 // impl NotificationHandler for BlockMonitor {
-//     async fn handle_notification(&self, notification: ChainNotification) -> Result<(), blocktalk::BlockTalkError> {
+//     async fn handle_notification(&self, notification: ChainNotification) -> Result<(), BlockTalkError> {
 //         match notification {
 //             ChainNotification::BlockConnected(block) => {
-//                 let height = *self.latest_height.lock().await;
-//                 println!("New block at height {}: {}", height + 1, block.block_hash());
-//                 *self.latest_height.lock().await = height + 1;
+//                 let mut height = self.latest_height.lock().await;
+//                 *height += 1;
+//                 println!("New block at height {}: {}", *height, block.block_hash());
 //             }
 //             ChainNotification::TransactionAddedToMempool(tx) => {
 //                 println!("New mempool transaction: {}", tx.txid());
 //             }
-//             _ => {}
+//             ChainNotification::UpdatedBlockTip(hash) => {
+//                 println!("Block tip updated: {}", hash);
+//             }
+//             ChainNotification::BlockDisconnected(hash) => {
+//                 let mut height = self.latest_height.lock().await;
+//                 *height -= 1;
+//                 println!("Block disconnected at height {}: {}", *height, hash);
+//             }
+//             ChainNotification::TransactionRemovedFromMempool(txid) => {
+//                 println!("Transaction removed from mempool: {}", txid);
+//             }
+//             ChainNotification::ChainStateFlushed => {
+//                 println!("Chain state flushed");
+//             }
 //         }
 //         Ok(())
 //     }
@@ -28,19 +41,30 @@
 
 // #[tokio::main]
 // async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let blocktalk = BlockTalk::connect("/path/to/socket").await?;
+//     // Initialize BlockTalk
+//     let mut blocktalk = BlockTalk::init("/path/to/socket").await?;
 
-//     // Get current height
-//     let tip = blocktalk.chain().get_tip().await?;
+//     // Get current tip info
+//     let (height, _) = blocktalk.chain().get_tip().await?;
+    
+//     // Create monitor
 //     let monitor = BlockMonitor {
-//         latest_height: Arc::new(Mutex::new(tip.height)),
+//         latest_height: Arc::new(Mutex::new(height)),
 //     };
 
-//     // Register for notifications
-//     blocktalk.register_notifications(monitor).await?;
+//     // Register handler with chain interface
+//     let monitor_arc = Arc::new(monitor);
+    
+//     // Use the register_handler method directly on BlockTalk
+//     // This assumes BlockTalk has a method to access the chain mutably
+//     // or that it provides a way to register handlers directly
+//     blocktalk.chain().register_handler(monitor_arc).await;
 
-//     // Keep the program running
-//     loop {
-//         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-//     }
+//     println!("Monitoring blockchain events. Press Ctrl+C to exit.");
+    
+//     // Keep the program running until Ctrl+C
+//     tokio::signal::ctrl_c().await?;
+//     println!("Shutting down monitor...");
+
+//     Ok(())
 // }

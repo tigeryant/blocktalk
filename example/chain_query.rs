@@ -26,11 +26,12 @@ async fn main() -> Result<(), BlockTalkError> {
         let genesis_hash = query_genesis_block(chain).await;
         
         if let Some(genesis) = genesis_hash {
-            // Retrieve the full genesis block
-            get_block_details(chain, &genesis).await;
-            
-            // Only run this if we got the tip and genesis successfully
+            // Try fetching block details for current tip as fallback
             if let Ok((_, tip_hash)) = chain.get_tip().await {
+                println!("\nTrying to get block details for current tip instead...");
+                get_block_details(chain, &tip_hash).await;
+                
+                // If tip details work, try finding common ancestor with genesis
                 find_common_ancestor(chain, &tip_hash, &genesis).await;
             }
         }
@@ -109,6 +110,11 @@ async fn query_genesis_block(chain: &blocktalk::ChainInterface) -> Option<BlockH
                 Ok(is_in_chain) => {
                     println!("Genesis block is {} the best chain",
                         if is_in_chain { "in" } else { "not in" });
+                    
+                    if !is_in_chain {
+                        println!("WARNING: Genesis block not in best chain - this may indicate we're on a different chain.");
+                        println!("The following operations may fail if we're querying a testnet/regtest node with mainnet genesis, or vice versa.");
+                    }
                 }
                 Err(e) => {
                     println!("Error checking if genesis is in best chain: {}", e);
