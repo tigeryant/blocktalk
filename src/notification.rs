@@ -50,7 +50,6 @@ impl ChainNotificationHandler {
         &self,
         notification: ChainNotification,
     ) -> Result<(), BlockTalkError> {
-        // Get a copy of the handlers to avoid holding the lock during async calls
         let handlers = {
             // TODO: could use better error handling
             let guard = self.handlers.lock().unwrap();
@@ -78,9 +77,7 @@ impl chain_notifications::Server for ChainNotificationHandler {
     ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
         let handler = self.clone();
 
-        // Create a future that returns Result<(), Error>
         let future = async move {
-            // Get block info using POC pattern
             let params_reader = params.get()?;
             let block_info = params_reader.get_block()?;
             let mut block_data = block_info.get_data()?;
@@ -109,14 +106,9 @@ impl chain_notifications::Server for ChainNotificationHandler {
         let handler = self.clone();
 
         let future = async move {
-            // Get block info using POC pattern
             let params_reader = params.get()?;
             let block_info = params_reader.get_block()?;
-
-            // Get height
-            let height = block_info.get_height();
-
-            // Get hash using POC pattern
+            // let height = block_info.get_height();
             let hash_data = block_info.get_hash()?;
 
             // Create BlockHash from sha256d hash
@@ -145,7 +137,6 @@ impl chain_notifications::Server for ChainNotificationHandler {
     ) -> Promise<(), ::capnp::Error> {
         let handler = self.clone();
 
-        // Decode the transaction directly with pry!
         let tx =
             match bitcoin::Transaction::consensus_decode(&mut pry!(pry!(params.get()).get_tx())) {
                 Ok(tx) => tx,
@@ -157,7 +148,6 @@ impl chain_notifications::Server for ChainNotificationHandler {
                 }
             };
 
-        // Convert the async dispatch_notification to a Promise
         Promise::from_future(async move {
             handler
                 .dispatch_notification(ChainNotification::TransactionAddedToMempool(tx))
@@ -175,7 +165,6 @@ impl chain_notifications::Server for ChainNotificationHandler {
     ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
         let handler = self.clone();
 
-        // Get txid using pry! for early returns
         let txid = match bitcoin::Txid::consensus_decode(&mut pry!(pry!(params.get()).get_tx())) {
             Ok(txid) => txid,
             Err(e) => {
@@ -186,7 +175,6 @@ impl chain_notifications::Server for ChainNotificationHandler {
             }
         };
 
-        // Convert the async dispatch_notification to a Promise
         Promise::from_future(async move {
             handler
                 .dispatch_notification(ChainNotification::TransactionRemovedFromMempool(txid))
@@ -203,27 +191,23 @@ impl chain_notifications::Server for ChainNotificationHandler {
     //     _: chain_notifications::UpdatedBlockTipResults,
     // ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
     //     let handler = self.clone();
-
-    //     let future = async move {
-    //         // Get block hash
-    //         let params_reader = params.get()?;
-    //         // Try getting a block field first, then the hash from it
-    //         let block_info = params_reader.get_block()?;
-    //         let hash_data = block_info.get_hash()?;
-
-    //         // Create BlockHash from sha256d hash
-    //         let hash = {
-    //             let hash_obj = bitcoin::hashes::sha256d::Hash::from_slice(hash_data)
-    //                 .map_err(|e| ::capnp::Error::failed(format!("Invalid block hash: {}", e)))?;
-    //             bitcoin::BlockHash::from(hash_obj)
-    //         };
-
-    //         // Dispatch notification
+        
+    //     let context_reader = pry!(pry!(params.get()).get_context());
+    //     // According to the schema, the context reader has the data we need but differently structured
+    //     // We'll need to get the height and hash from appropriate fields based on the context schema
+    //     let block_info = pry!(context_reader.get_block());
+    //     let hash_data = pry!(block_info.get_hash());
+        
+    //     let hash = match bitcoin::hashes::sha256d::Hash::from_slice(hash_data) {
+    //         Ok(hash_obj) => bitcoin::BlockHash::from(hash_obj),
+    //         Err(e) => return Promise::err(::capnp::Error::failed(format!("Invalid block hash: {}", e)))
+    //     };
+    
+    //     // Convert the async dispatch_notification to a Promise
+    //     Promise::from_future(async move {
     //         handler.dispatch_notification(ChainNotification::UpdatedBlockTip(hash)).await
     //             .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
-    //     };
-
-    //     ::capnp::capability::Promise::from_future(future)
+    //     })
     // }
 
     fn updated_block_tip(

@@ -1,3 +1,4 @@
+use bitcoin::consensus::Decodable;
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash};
 use std::sync::Arc;
@@ -45,23 +46,18 @@ impl ChainInterface {
     pub async fn subscribe_to_notifications(&self) -> Result<(), BlockTalkError> {
         log::debug!("Subscribing to chain notifications");
 
-        // Create notification client from our handler
         let handler = self.notification_handler.lock().unwrap().clone();
         let notification_client = capnp_rpc::new_client(handler);
 
-        // Create request to handle notifications (method from your reference implementation)
         let mut handle_req = self.chain_client.handle_notifications_request();
 
-        // Set thread context
         handle_req
             .get()
             .get_context()?
             .set_thread(self.thread.clone());
 
-        // Set the notification handler
         handle_req.get().set_notifications(notification_client);
 
-        // Send registration request
         let _ = handle_req.send().promise.await?;
 
         log::info!("Successfully subscribed to chain notifications");
@@ -110,32 +106,75 @@ impl ChainInterface {
     }
 
     /// Get block hash at specific height
-    pub async fn get_block_at_height(
+
+    // pub async fn get_block_at_height(
+    //     &self,
+    //     height: i32,
+    // ) -> Result<Option<BlockHash>, BlockTalkError> {
+    //     log::debug!("Getting block hash at height {}", height);
+
+    //     let mut hash_req = self.chain_client.get_block_hash_request();
+
+    //     // Set up thread context and parameters
+    //     hash_req
+    //         .get()
+    //         .get_context()
+    //         .map_err(BlockTalkError::ConnectionError)?
+    //         .set_thread(self.thread.clone());
+
+    //     hash_req.get().set_height(height);
+
+    //     // Send request and get result
+    //     let response = hash_req.send().promise.await?;
+    //     let mut result = response
+    //         .get()
+    //         .map_err(BlockTalkError::ConnectionError)?
+    //         .get_result()
+    //         .map_err(BlockTalkError::ConnectionError)?;
+
+    //     // If block doesn't exist at this height, return None
+    //     if result.is_empty() {
+    //         log::debug!("No block found at height {}", height);
+    //         return Ok(None);
+    //     }
+
+    //     // Decode block hash directly using consensus_decode
+    //     let hash = BlockHash::consensus_decode(&mut result)
+    //         .map_err(|_| BlockTalkError::InvalidBlockData)?;
+
+    //     log::debug!("Retrieved block hash at height {}", height);
+    //     log::trace!("Block hash: {}", hash);
+
+    //     Ok(Some(hash))
+    // }
+
+    pub async fn get_block(
         &self,
+        node_tip_hash: &bitcoin::BlockHash,
         height: i32,
-    ) -> Result<Option<BlockHash>, BlockTalkError> {
-        log::debug!("Getting block hash at height {}", height);
-        let mut hash_req = self.chain_client.get_block_hash_request();
-        hash_req
+    ) -> Result<Block, BlockTalkError> {
+        log::debug!("Getting ancestor block from height: {}", height);
+
+        let mut find_req = self.chain_client.find_ancestor_by_height_request();
+
+        find_req
             .get()
-            .get_context()?
+            .get_context()
+            .map_err(BlockTalkError::ConnectionError)?
             .set_thread(self.thread.clone());
-        hash_req.get().set_height(height);
-        let response = hash_req.send().promise.await?;
 
-        // If block doesn't exist at this height, return None
-        if response.get()?.get_result()?.is_empty() {
-            log::debug!("No block found at height {}", height);
-            return Ok(None);
-        }
+        let mut params = find_req.get();
+        params.set_block_hash(node_tip_hash.as_ref());
+        params.set_ancestor_height(height);
+        params
+            .get_ancestor()
+            .map_err(BlockTalkError::ConnectionError)?
+            .set_want_data(true);
 
-        let hash_bytes = response.get()?.get_result()?.to_vec();
-        let hash = self.bytes_to_block_hash(&hash_bytes)?;
+        let response = find_req.send().promise.await?;
+        let mut data = response.get()?.get_ancestor()?.get_data()?;
 
-        log::debug!("Retrieved block hash at height {}", height);
-        log::trace!("Block hash: {}", hash);
-
-        Ok(Some(hash))
+        Block::consensus_decode(&mut data).map_err(|_| BlockTalkError::InvalidBlockData)
     }
 
     /// Check if a block is in the best chain
@@ -210,7 +249,6 @@ impl ChainInterface {
         log::debug!("Getting block with hash {}", block_hash);
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
 
-        // Use find_block_request instead, as get_block_request is not available
         let mut find_req = self.chain_client.find_block_request();
         find_req
             .get()
@@ -248,7 +286,6 @@ impl ChainInterface {
 
         let mut hash_bytes = [0u8; 32];
         hash_bytes.copy_from_slice(bytes);
-        // Use from_raw_hash which is specifically designed for this purpose
         Ok(BlockHash::from_raw_hash(
             bitcoin::hashes::Hash::from_byte_array(hash_bytes),
         ))

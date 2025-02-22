@@ -23,17 +23,13 @@ async fn main() -> Result<(), BlockTalkError> {
             let chain = blocktalk.chain();
 
             // Execute chain queries
-            query_chain_tip(chain).await;
-            let genesis_hash = query_genesis_block(chain).await;
-
-            if let Some(genesis) = genesis_hash {
-                // Try fetching block details for current tip as fallback
-                if let Ok((_, tip_hash)) = chain.get_tip().await {
-                    println!("\nTrying to get block details for current tip instead...");
-                    get_block_details(chain, &tip_hash).await;
-
-                    // If tip details work, try finding common ancestor with genesis
-                    find_common_ancestor(chain, &tip_hash, &genesis).await;
+            let tip_info = query_chain_tip(chain).await;
+            
+            // If we got the tip info, try to get a block from a few blocks back
+            if let Some((height, tip_hash)) = tip_info {
+                if height > 3 {
+                    // Try to get block from 1 block before tip
+                    get_block_at_height(chain, &tip_hash, height).await;
                 }
             }
 
@@ -76,56 +72,17 @@ async fn connect_to_node(socket_path: &str) -> Option<BlockTalk> {
 }
 
 /// Queries and displays the current chain tip
-async fn query_chain_tip(chain: &blocktalk::ChainInterface) {
+async fn query_chain_tip(chain: &blocktalk::ChainInterface) -> Option<(i32, BlockHash)> {
     println!("\nFetching current chain tip...");
     match tokio::time::timeout(Duration::from_secs(5), chain.get_tip()).await {
         Ok(Ok((height, hash))) => {
             println!("Chain tip:");
             println!("  Height: {}", height);
             println!("  Hash: {}", hash);
+            Some((height, hash))
         }
         Ok(Err(e)) => {
             println!("Error fetching chain tip: {}", e);
-        }
-        Err(_) => {
-            println!("Request timed out after 5 seconds");
-        }
-    }
-}
-
-/// Queries and displays the genesis block
-async fn query_genesis_block(chain: &blocktalk::ChainInterface) -> Option<BlockHash> {
-    println!("\nFetching genesis block...");
-    match tokio::time::timeout(Duration::from_secs(5), chain.get_block_at_height(0)).await {
-        Ok(Ok(Some(hash))) => {
-            println!("Genesis block hash: {}", hash);
-
-            // Check if genesis block is in best chain
-            match chain.is_in_best_chain(&hash).await {
-                Ok(is_in_chain) => {
-                    println!(
-                        "Genesis block is {} the best chain",
-                        if is_in_chain { "in" } else { "not in" }
-                    );
-
-                    if !is_in_chain {
-                        println!("WARNING: Genesis block not in best chain - this may indicate we're on a different chain.");
-                        println!("The following operations may fail if we're querying a testnet/regtest node with mainnet genesis, or vice versa.");
-                    }
-                }
-                Err(e) => {
-                    println!("Error checking if genesis is in best chain: {}", e);
-                }
-            }
-
-            Some(hash)
-        }
-        Ok(Ok(None)) => {
-            println!("No block found at height 0!");
-            None
-        }
-        Ok(Err(e)) => {
-            println!("Error fetching genesis block: {}", e);
             None
         }
         Err(_) => {
@@ -135,16 +92,17 @@ async fn query_genesis_block(chain: &blocktalk::ChainInterface) -> Option<BlockH
     }
 }
 
-/// Gets and displays full block details using the get_block_by_hash method
-async fn get_block_details(chain: &blocktalk::ChainInterface, block_hash: &BlockHash) {
-    println!("\nFetching full block details for {}...", block_hash);
-    match tokio::time::timeout(Duration::from_secs(5), chain.get_block_by_hash(block_hash)).await {
-        Ok(Ok(Some(block))) => {
-            println!("Block details:");
+/// Gets and displays block at specific height using the get_block method
+async fn get_block_at_height(chain: &blocktalk::ChainInterface, tip_hash: &BlockHash, height: i32) {
+    println!("\nFetching block at height {} using tip {}...", height, tip_hash);
+    match tokio::time::timeout(Duration::from_secs(5), chain.get_block(tip_hash, height)).await {
+        Ok(Ok(block)) => {
+            println!("Successfully retrieved block:");
+            println!("  Hash: {}", block.block_hash());
             println!("  Version: {:?}", block.header.version);
             println!("  Previous block hash: {}", block.header.prev_blockhash);
             println!("  Merkle root: {}", block.header.merkle_root);
-            println!("  Timestamp: {}", block.header.time,);
+            println!("  Timestamp: {}", block.header.time);
             println!("  Bits: 0x{:x}", block.header.bits);
             println!("  Nonce: {}", block.header.nonce);
             println!("  Transaction count: {}", block.txdata.len());
@@ -179,46 +137,9 @@ async fn get_block_details(chain: &blocktalk::ChainInterface, block_hash: &Block
             // Calculate block size
             let serialized_size = bitcoin::consensus::serialize(&block).len();
             println!("  Block size: {} bytes", serialized_size);
-
-            // Show block weight if it's a segwit block
-            // if block.weight() != serialized_size * 4 {
-            //     println!("  Block weight: {} weight units (segwit)", block.weight());
-            // }
-        }
-        Ok(Ok(None)) => {
-            println!("Block not found!");
         }
         Ok(Err(e)) => {
             println!("Error fetching block: {}", e);
-        }
-        Err(_) => {
-            println!("Request timed out after 5 seconds");
-        }
-    }
-}
-
-/// Finds and displays the common ancestor between two blocks
-async fn find_common_ancestor(
-    chain: &blocktalk::ChainInterface,
-    block1: &BlockHash,
-    block2: &BlockHash,
-) {
-    println!("\nFinding common ancestor between tip and genesis...");
-    match tokio::time::timeout(
-        Duration::from_secs(5),
-        chain.find_common_ancestor(block1, block2),
-    )
-    .await
-    {
-        Ok(Ok(Some(ancestor))) => {
-            println!("Common ancestor: {}", ancestor);
-            println!("(Should be genesis block)");
-        }
-        Ok(Ok(None)) => {
-            println!("No common ancestor found!");
-        }
-        Ok(Err(e)) => {
-            println!("Error finding common ancestor: {}", e);
         }
         Err(_) => {
             println!("Request timed out after 5 seconds");
