@@ -60,7 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Register handler with chain interface
         let monitor_arc = Arc::new(monitor);
         blocktalk.chain().register_handler(monitor_arc).await;
-
+        blocktalk.chain().subscribe_to_notifications().await?;
+        
         println!("Monitoring blockchain events. Press Ctrl+C to exit.");
         
         // Keep the program running until Ctrl+C
