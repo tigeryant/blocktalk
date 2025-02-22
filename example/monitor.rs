@@ -15,27 +15,63 @@ impl NotificationHandler for BlockMonitor {
         notification: ChainNotification,
     ) -> Result<(), BlockTalkError> {
         match notification {
+            ChainNotification::UpdatedBlockTip(_) => {
+                println!("\n╔═══════════════════════╗");
+                println!("║   Block Tip Updated   ║");
+                println!("╚═══════════════════════╝");
+            }
+
             ChainNotification::BlockConnected(block) => {
                 let mut height = self.latest_height.lock().await;
                 *height += 1;
-                println!("New block at height {}: {}", *height, block.block_hash());
+
+                println!("\n╔════════════════════════════════════════════════════════════════════════════════╗");
+                println!("║                                New Block Connected                             ║");
+                println!("╠════════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Height      │ {:<64} ║", *height);
+                println!("║ Hash        │ {:<64} ║", block.block_hash());
+                println!("║ Time        │ {:<64} ║", block.header.time);
+                println!("║ Transaction │ {:<64} ║", block.txdata.len());
+                println!("║ Size        │ {:<64} ║", format!("{} bytes", bitcoin::consensus::serialize(&block).len()));
+                println!("╚═════════════╧══════════════════════════════════════════════════════════════════╝");
             }
+            
             ChainNotification::TransactionAddedToMempool(tx) => {
-                println!("New mempool transaction: {}", tx.txid());
+                println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+                println!("║                         Transaction Added to Mempool                         ║");
+                println!("╠══════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ TXID         │ {:<60} ║", tx.txid());
+                println!("║ Inputs       │ {:<60} ║", tx.input.len());
+                println!("║ Outputs      │ {:<60} ║", tx.output.len());
+                if tx.is_coinbase() {
+                    println!("║ Type         │ {:<60} ║", "Coinbase Transaction");
+                }
+                println!("╚══════════════╧═══════════════════════════════════════════════════════════════╝");
             }
-            ChainNotification::UpdatedBlockTip(hash) => {
-                println!("Block tip updated: {}", hash);
-            }
+            
             ChainNotification::BlockDisconnected(hash) => {
                 let mut height = self.latest_height.lock().await;
                 *height -= 1;
-                println!("Block disconnected at height {}: {}", *height, hash);
+                println!("\n╔════════════════════════════════════════════════════════════════════════╗");
+                println!("║                          Block Disconnected                            ║");
+                println!("╠════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Height       │ {:<60} ║", *height);
+                println!("║ Hash         │ {:<60} ║", hash);
+                println!("╚══════════════╧══════════════════════════════════════════════════════════╝");
             }
+            
             ChainNotification::TransactionRemovedFromMempool(txid) => {
-                println!("Transaction removed from mempool: {}", txid);
+                println!("\n╔════════════════════════════════════════════════════════════════════════╗");
+                println!("║                    Transaction Removed from Mempool                    ║");
+                println!("╠════════════════════════════════════════════════════════════════════════╣");
+                println!("║ TXID         │ {:<60} ║", txid);
+                println!("╚══════════════╧══════════════════════════════════════════════════════════╝");
             }
+            
             ChainNotification::ChainStateFlushed => {
-                println!("Chain state flushed");
+                println!("\n╔════════════════════════════════════════════╗");
+                println!("║            Chain State Flushed             ║");
+                println!("╚════════════════════════════════════════════╝");
             }
         }
         Ok(())
