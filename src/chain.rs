@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bitcoin::{Block, BlockHash};
 use bitcoin::hashes::Hash;
+use std::sync::Mutex;
 
 use crate::{
     chain_capnp::chain::Client as ChainClient,
@@ -32,8 +33,8 @@ impl ChainInterface {
         }
     }
 
-    pub fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) {
-        self.notification_handler.register_handler(handler);
+    pub async fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) {
+        self.notification_handler.register_handler(handler).await;
     }
 
     pub fn notification_handler(&self) -> &ChainNotificationHandler {

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use bitcoin::{Block, BlockHash, Transaction, Txid, consensus::Decodable};
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use bitcoin::hashes::{Hash};
+use std::sync::Mutex;
+use bitcoin::hashes::Hash;
 
 use crate::error::BlockTalkError;
 use crate::chain_capnp::chain_notifications;
@@ -39,7 +39,8 @@ impl ChainNotificationHandler {
     }
 
     pub async fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) {
-        let mut guard = self.handlers.lock().await;
+        // TODO: could use better error handling
+        let mut guard = self.handlers.lock().unwrap(); 
         guard.push(handler);
     }
 
@@ -49,7 +50,8 @@ impl ChainNotificationHandler {
     ) -> Result<(), BlockTalkError> {
         // Get a copy of the handlers to avoid holding the lock during async calls
         let handlers = {
-            let guard = self.handlers.lock().await;
+            // TODO: could use better error handling
+            let guard = self.handlers.lock().unwrap();
             guard.clone()
         };
         

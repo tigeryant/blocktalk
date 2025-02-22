@@ -36,6 +36,10 @@ impl BlockTalk {
         &self.chain
     }
 
+    pub fn chain_mut(&mut self) -> &mut Arc<ChainInterface> {
+        &mut self.chain
+    }
+
     /// Disconnect from the node
     pub async fn disconnect(self) -> Result<(), BlockTalkError> {
         // Check if we're the last owner of the connection
