@@ -40,7 +40,7 @@ impl NotificationHandler for BlockMonitor {
                 println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
                 println!("║                         Transaction Added to Mempool                         ║");
                 println!("╠══════════════════════════════════════════════════════════════════════════════╣");
-                println!("║ TXID         │ {:<60} ║", tx.txid());
+                println!("║ TXID         │ {:<60} ║", tx.compute_txid());
                 println!("║ Inputs       │ {:<60} ║", tx.input.len());
                 println!("║ Outputs      │ {:<60} ║", tx.output.len());
                 if tx.is_coinbase() {
@@ -84,9 +84,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     local
         .run_until(async move {
-            // Initialize BlockTalk
+            println!("⏳ Connecting to Bitcoin node...");
             let blocktalk =
-                BlockTalk::init("../bitcoin/datadir_bdk_wallet/regtest/node.sock").await?;
+                BlockTalk::init("../bitcoin/datadir_blocktalk/regtest/node.sock").await?;
+            println!("✅ Connected successfully!");
 
             // Get current tip info
             let (height, _) = blocktalk.chain().get_tip().await?;
@@ -102,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Start subscribing to notifications
             blocktalk.chain().subscribe_to_notifications().await?;
 
-            println!("Monitoring blockchain events. Press Ctrl+C to exit.");
+            println!("🔍 Monitoring blockchain events. Press Ctrl+C to exit.");
 
             // Keep the program running until Ctrl+C
             tokio::signal::ctrl_c().await?;

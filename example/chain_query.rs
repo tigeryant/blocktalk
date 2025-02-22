@@ -1,4 +1,4 @@
-use bitcoin::{Block, BlockHash};
+use bitcoin::BlockHash;
 use blocktalk::{BlockTalk, BlockTalkError};
 use std::path::Path;
 use std::time::Duration;
@@ -6,7 +6,7 @@ use tokio::task::LocalSet;
 
 #[tokio::main]
 async fn main() -> Result<(), BlockTalkError> {
-    let socket_path = "../bitcoin/datadir_bdk_wallet/regtest/node.sock";
+    let socket_path = "../bitcoin/datadir_blocktalk/regtest/node.sock";
 
     if !check_socket_path(socket_path) {
         return Ok(());
@@ -54,18 +54,18 @@ fn check_socket_path(socket_path: &str) -> bool {
 
 /// Attempts to connect to the Bitcoin node with timeout
 async fn connect_to_node(socket_path: &str) -> Option<BlockTalk> {
-    println!("Connecting to Bitcoin node...");
+    println!("⏳ Connecting to Bitcoin node...");
     match tokio::time::timeout(Duration::from_secs(5), BlockTalk::init(socket_path)).await {
         Ok(Ok(bt)) => {
-            println!("Connected successfully!");
+            println!("✅ Connected successfully!");
             Some(bt)
         }
         Ok(Err(e)) => {
-            println!("Error connecting to Bitcoin node: {}", e);
+            println!("⛔️ Error connecting to Bitcoin node: {}", e);
             None
         }
         Err(_) => {
-            println!("Connection timed out after 5 seconds");
+            println!("⏲️ Connection timed out after 5 seconds");
             None
         }
     }
@@ -122,7 +122,7 @@ async fn get_block_at_height(chain: &blocktalk::ChainInterface, tip_hash: &Block
                 let count = std::cmp::min(3, block.txdata.len());
                 for (i, tx) in block.txdata.iter().take(count).enumerate() {
                     println!("║ TX #{:<3}                                                                         ║", i + 1);
-                    println!("║ ├─ TXID      │ {:<64} ║", tx.txid());
+                    println!("║ ├─ TXID      │ {:<64} ║", tx.compute_txid());
                     println!("║ ├─ Inputs    │ {:<64} ║", tx.input.len());
                     println!("║ ├─ Outputs   │ {:<64} ║", tx.output.len());
                     
