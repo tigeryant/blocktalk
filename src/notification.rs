@@ -3,6 +3,8 @@ use bitcoin::{Block, BlockHash, Transaction, Txid, consensus::Decodable};
 use std::sync::Arc;
 use std::sync::Mutex;
 use bitcoin::hashes::Hash;
+use capnp_rpc::pry;
+use capnp::capability::Promise;
 
 use crate::error::BlockTalkError;
 use crate::chain_capnp::chain_notifications;
@@ -92,15 +94,14 @@ impl chain_notifications::Server for ChainNotificationHandler {
                 .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
         };
         
-        // Convert the future to a Promise
-        ::capnp::capability::Promise::from_future(future)
+        Promise::from_future(future)
     }
 
     fn block_disconnected(
         &mut self,
         params: chain_notifications::BlockDisconnectedParams,
         _: chain_notifications::BlockDisconnectedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
+    ) -> Promise<(), ::capnp::Error> {
         let handler = self.clone();
         
         let future = async move {
@@ -126,57 +127,48 @@ impl chain_notifications::Server for ChainNotificationHandler {
                 .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
         };
         
-        ::capnp::capability::Promise::from_future(future)
+        Promise::from_future(future)
     }
 
-    // fn transaction_added_to_mempool(
-    //     &mut self,
-    //     params: chain_notifications::TransactionAddedToMempoolParams,
-    //     _: chain_notifications::TransactionAddedToMempoolResults,
-    // ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-    //     let handler = self.clone();
+    fn transaction_added_to_mempool(
+        &mut self,
+        params: chain_notifications::TransactionAddedToMempoolParams,
+        _: chain_notifications::TransactionAddedToMempoolResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let handler = self.clone();
         
-    //     let future = async move {
-    //         // Get transaction data
-    //         let tx_reader = params.get()?;
-    //         let tx_data = tx_reader.get_data()?;
-            
-    //         // Decode transaction
-    //         let tx = bitcoin::Transaction::consensus_decode(&mut tx_data)
-    //             .map_err(|e| ::capnp::Error::failed(format!("Failed to decode transaction: {}", e)))?;
-            
-    //         // Dispatch notification
-    //         handler.dispatch_notification(ChainNotification::TransactionAddedToMempool(tx)).await
-    //             .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
-    //     };
+        // Decode the transaction directly with pry!
+        let tx = match bitcoin::Transaction::consensus_decode(&mut pry!(pry!(params.get()).get_tx())) {
+            Ok(tx) => tx,
+            Err(e) => return Promise::err(::capnp::Error::failed(format!("Failed to decode transaction: {}", e)))
+        };
         
-    //     ::capnp::capability::Promise::from_future(future)
-    // }
+        // Convert the async dispatch_notification to a Promise
+        Promise::from_future(async move {
+            handler.dispatch_notification(ChainNotification::TransactionAddedToMempool(tx)).await
+                .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
+        })
+    }
 
-    // fn transaction_removed_from_mempool(
-    //     &mut self,
-    //     params: chain_notifications::TransactionRemovedFromMempoolParams,
-    //     _: chain_notifications::TransactionRemovedFromMempoolResults,
-    // ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-    //     let handler = self.clone();
+    fn transaction_removed_from_mempool(
+        &mut self,
+        params: chain_notifications::TransactionRemovedFromMempoolParams,
+        _: chain_notifications::TransactionRemovedFromMempoolResults,
+    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
+        let handler = self.clone();
         
-    //     let future = async move {
-    //         // Get txid
-    //         let params_reader = params.get()?;
-    //         let txid_reader = params_reader.get_txid()?;
-    //         let txid_data = txid_reader.as_bytes()?;
-            
-    //         // Decode txid
-    //         let txid = bitcoin::Txid::consensus_decode(&mut txid_data)
-    //             .map_err(|e| ::capnp::Error::failed(format!("Failed to decode txid: {}", e)))?;
-            
-    //         // Dispatch notification
-    //         handler.dispatch_notification(ChainNotification::TransactionRemovedFromMempool(txid)).await
-    //             .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
-    //     };
+        // Get txid using pry! for early returns
+        let txid = match bitcoin::Txid::consensus_decode(&mut pry!(pry!(params.get()).get_tx())) {
+            Ok(txid) => txid,
+            Err(e) => return Promise::err(::capnp::Error::failed(format!("Failed to decode txid: {}", e)))
+        };
         
-    //     ::capnp::capability::Promise::from_future(future)
-    // }
+        // Convert the async dispatch_notification to a Promise
+        Promise::from_future(async move {
+            handler.dispatch_notification(ChainNotification::TransactionRemovedFromMempool(txid)).await
+                .map_err(|e| ::capnp::Error::failed(format!("Failed to dispatch notification: {}", e)))
+        })
+    }
 
     // fn updated_block_tip(
     //     &mut self,

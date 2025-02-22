@@ -41,26 +41,32 @@ impl NotificationHandler for BlockMonitor {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize BlockTalk
-    let mut blocktalk = BlockTalk::init("../bitcoin/datadir_bdk_wallet/regtest/node.sock").await?;
+    // Create a new LocalSet
+    let local = tokio::task::LocalSet::new();
 
-    // Get current tip info
-    let (height, _) = blocktalk.chain().get_tip().await?;
-    
-    // Create monitor
-    let monitor = BlockMonitor {
-        latest_height: Arc::new(Mutex::new(height)),
-    };
+    // Run our async code inside the LocalSet
+    local.run_until(async move {
+        // Initialize BlockTalk
+        let blocktalk = BlockTalk::init("../bitcoin/datadir_bdk_wallet/regtest/node.sock").await?;
 
-    // Register handler with chain interface
-    let monitor_arc = Arc::new(monitor);
-    blocktalk.chain_mut().register_handler(monitor_arc).await;
+        // Get current tip info
+        let (height, _) = blocktalk.chain().get_tip().await?;
+        
+        // Create monitor
+        let monitor = BlockMonitor {
+            latest_height: Arc::new(Mutex::new(height)),
+        };
 
-    println!("Monitoring blockchain events. Press Ctrl+C to exit.");
-    
-    // Keep the program running until Ctrl+C
-    tokio::signal::ctrl_c().await?;
-    println!("Shutting down monitor...");
+        // Register handler with chain interface
+        let monitor_arc = Arc::new(monitor);
+        blocktalk.chain().register_handler(monitor_arc).await;
 
-    Ok(())
+        println!("Monitoring blockchain events. Press Ctrl+C to exit.");
+        
+        // Keep the program running until Ctrl+C
+        tokio::signal::ctrl_c().await?;
+        println!("Shutting down monitor...");
+
+        Ok(())
+    }).await
 }

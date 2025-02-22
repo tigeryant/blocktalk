@@ -13,7 +13,7 @@ use crate::{
 pub struct ChainInterface {
     chain_client: ChainClient,
     thread: ThreadClient,
-    notification_handler: ChainNotificationHandler,
+    notification_handler: Arc<Mutex<ChainNotificationHandler>>,
 }
 
 impl ChainInterface {
@@ -21,7 +21,7 @@ impl ChainInterface {
         Self {
             chain_client: connection.chain_client().clone(),
             thread: connection.thread().clone(),
-            notification_handler: ChainNotificationHandler::new(),
+            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
         }
     }
 
@@ -29,23 +29,25 @@ impl ChainInterface {
         Self {
             chain_client,
             thread,
-            notification_handler: ChainNotificationHandler::new(),
+            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
         }
     }
 
-    pub async fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) {
-        self.notification_handler.register_handler(handler).await;
+    pub async fn register_handler(&self, handler: Arc<dyn NotificationHandler>) {
+        let mut notification_handler = self.notification_handler.lock().unwrap();
+        notification_handler.register_handler(handler).await;
     }
 
-    pub fn notification_handler(&self) -> &ChainNotificationHandler {
-        &self.notification_handler
+    pub fn notification_handler(&self) -> Arc<Mutex<ChainNotificationHandler>> {
+        self.notification_handler.clone()
     }
 
     pub async fn subscribe_to_notifications(&self) -> Result<(), BlockTalkError> {
         log::debug!("Subscribing to chain notifications");
         
         // Create notification client from our handler
-        let notification_client = capnp_rpc::new_client(self.notification_handler.clone());
+        let handler = self.notification_handler.lock().unwrap().clone();
+        let notification_client = capnp_rpc::new_client(handler);
         
         // Create request to handle notifications (method from your reference implementation)
         let mut handle_req = self.chain_client.handle_notifications_request();
