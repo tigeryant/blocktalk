@@ -10,8 +10,8 @@ pub use chain::ChainInterface;
 pub use connection::Connection;
 pub use error::BlockTalkError;
 pub use generated::*;
-pub use notification::NotificationHandler;
 pub use notification::ChainNotification;
+pub use notification::NotificationHandler;
 
 #[derive(Clone)]
 /// Main entry point for blockchain interaction

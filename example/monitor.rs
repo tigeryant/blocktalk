@@ -1,6 +1,6 @@
 // examples/monitor.rs
-use blocktalk::{BlockTalk, NotificationHandler, ChainNotification, BlockTalkError};
 use async_trait::async_trait;
+use blocktalk::{BlockTalk, BlockTalkError, ChainNotification, NotificationHandler};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -10,7 +10,10 @@ struct BlockMonitor {
 
 #[async_trait]
 impl NotificationHandler for BlockMonitor {
-    async fn handle_notification(&self, notification: ChainNotification) -> Result<(), BlockTalkError> {
+    async fn handle_notification(
+        &self,
+        notification: ChainNotification,
+    ) -> Result<(), BlockTalkError> {
         match notification {
             ChainNotification::BlockConnected(block) => {
                 let mut height = self.latest_height.lock().await;
@@ -41,33 +44,35 @@ impl NotificationHandler for BlockMonitor {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a new LocalSet
     let local = tokio::task::LocalSet::new();
 
-    // Run our async code inside the LocalSet
-    local.run_until(async move {
-        // Initialize BlockTalk
-        let blocktalk = BlockTalk::init("../bitcoin/datadir_bdk_wallet/regtest/node.sock").await?;
+    local
+        .run_until(async move {
+            // Initialize BlockTalk
+            let blocktalk =
+                BlockTalk::init("../bitcoin/datadir_bdk_wallet/regtest/node.sock").await?;
 
-        // Get current tip info
-        let (height, _) = blocktalk.chain().get_tip().await?;
-        
-        // Create monitor
-        let monitor = BlockMonitor {
-            latest_height: Arc::new(Mutex::new(height)),
-        };
+            // Get current tip info
+            let (height, _) = blocktalk.chain().get_tip().await?;
 
-        // Register handler with chain interface
-        let monitor_arc = Arc::new(monitor);
-        blocktalk.chain().register_handler(monitor_arc).await;
-        blocktalk.chain().subscribe_to_notifications().await?;
-        
-        println!("Monitoring blockchain events. Press Ctrl+C to exit.");
-        
-        // Keep the program running until Ctrl+C
-        tokio::signal::ctrl_c().await?;
-        println!("Shutting down monitor...");
+            // Create monitor
+            let monitor = BlockMonitor {
+                latest_height: Arc::new(Mutex::new(height)),
+            };
 
-        Ok(())
-    }).await
+            // Register handler with chain interface
+            let monitor_arc = Arc::new(monitor);
+            blocktalk.chain().register_handler(monitor_arc).await;
+            // Start subscribing to notifications
+            blocktalk.chain().subscribe_to_notifications().await?;
+
+            println!("Monitoring blockchain events. Press Ctrl+C to exit.");
+
+            // Keep the program running until Ctrl+C
+            tokio::signal::ctrl_c().await?;
+            println!("Shutting down monitor...");
+
+            Ok(())
+        })
+        .await
 }

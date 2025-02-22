@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use bitcoin::{Block, BlockHash};
 use bitcoin::hashes::Hash;
+use bitcoin::{Block, BlockHash};
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
@@ -44,26 +44,26 @@ impl ChainInterface {
 
     pub async fn subscribe_to_notifications(&self) -> Result<(), BlockTalkError> {
         log::debug!("Subscribing to chain notifications");
-        
+
         // Create notification client from our handler
         let handler = self.notification_handler.lock().unwrap().clone();
         let notification_client = capnp_rpc::new_client(handler);
-        
+
         // Create request to handle notifications (method from your reference implementation)
         let mut handle_req = self.chain_client.handle_notifications_request();
-        
+
         // Set thread context
         handle_req
             .get()
             .get_context()?
             .set_thread(self.thread.clone());
-            
+
         // Set the notification handler
         handle_req.get().set_notifications(notification_client);
-        
+
         // Send registration request
         let _ = handle_req.send().promise.await?;
-        
+
         log::info!("Successfully subscribed to chain notifications");
         Ok(())
     }
@@ -131,7 +131,7 @@ impl ChainInterface {
 
         let hash_bytes = response.get()?.get_result()?.to_vec();
         let hash = self.bytes_to_block_hash(&hash_bytes)?;
-        
+
         log::debug!("Retrieved block hash at height {}", height);
         log::trace!("Block hash: {}", hash);
 
@@ -142,7 +142,7 @@ impl ChainInterface {
     pub async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError> {
         log::debug!("Checking if block is in best chain");
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
-        
+
         let mut find_req = self.chain_client.find_block_request();
         find_req
             .get()
@@ -171,10 +171,14 @@ impl ChainInterface {
         block1_hash: &BlockHash,
         block2_hash: &BlockHash,
     ) -> Result<Option<BlockHash>, BlockTalkError> {
-        log::debug!("Finding common ancestor between blocks {} and {}", block1_hash, block2_hash);
+        log::debug!(
+            "Finding common ancestor between blocks {} and {}",
+            block1_hash,
+            block2_hash
+        );
         let hash1_bytes = block1_hash.to_raw_hash().to_byte_array();
         let hash2_bytes = block2_hash.to_raw_hash().to_byte_array();
-        
+
         let mut find_req = self.chain_client.find_common_ancestor_request();
         find_req
             .get()
@@ -197,12 +201,15 @@ impl ChainInterface {
             Ok(Some(ancestor_hash))
         }
     }
-    
+
     /// Get a full block by its hash
-    pub async fn get_block_by_hash(&self, block_hash: &BlockHash) -> Result<Option<Block>, BlockTalkError> {
+    pub async fn get_block_by_hash(
+        &self,
+        block_hash: &BlockHash,
+    ) -> Result<Option<Block>, BlockTalkError> {
         log::debug!("Getting block with hash {}", block_hash);
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
-        
+
         // Use find_block_request instead, as get_block_request is not available
         let mut find_req = self.chain_client.find_block_request();
         find_req
@@ -210,38 +217,40 @@ impl ChainInterface {
             .get_context()?
             .set_thread(self.thread.clone());
         find_req.get().set_hash(&hash_bytes);
-        
+
         let response = find_req.send().promise.await?;
-        
+
         // Check if the block was found
         let block_info = response.get()?.get_block()?;
         if !block_info.has_data() || block_info.get_data()?.is_empty() {
             log::debug!("No block data found for hash {}", block_hash);
             return Ok(None);
         }
-        
+
         // Parse the block data
         match bitcoin::consensus::deserialize::<Block>(block_info.get_data()?) {
             Ok(block) => {
                 log::debug!("Successfully retrieved block {}", block_hash);
                 Ok(Some(block))
-            },
+            }
             Err(e) => {
                 log::error!("Failed to parse block data: {}", e);
                 Err(BlockTalkError::InvalidBlockData)
             }
         }
     }
-    
+
     // Helper method to convert bytes to BlockHash
     fn bytes_to_block_hash(&self, bytes: &[u8]) -> Result<BlockHash, BlockTalkError> {
         if bytes.len() != 32 {
             return Err(BlockTalkError::InvalidBlockData);
         }
-        
+
         let mut hash_bytes = [0u8; 32];
         hash_bytes.copy_from_slice(bytes);
         // Use from_raw_hash which is specifically designed for this purpose
-        Ok(BlockHash::from_raw_hash(bitcoin::hashes::Hash::from_byte_array(hash_bytes)))
+        Ok(BlockHash::from_raw_hash(
+            bitcoin::hashes::Hash::from_byte_array(hash_bytes),
+        ))
     }
 }
