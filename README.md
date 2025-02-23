@@ -57,15 +57,125 @@ mkdir -p datadir_blocktalk
 - `-ipcbind=unix`: Enable Unix domain socket for IPC
 - `-debug=ipc`: Enable IPC debugging logs
 
-### Run BlockTalk
+### Usage
 
-```bash
-# Clone BlockTalk repository
-git clone https://github.com/yourusername/blocktalk.git
-cd blocktalk
+#### Chain queries
 
-# Run the chain query example
+```rust
+let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
+let chain = blocktalk.chain();
+
+// Get current tip
+let (height, hash) = chain.get_tip().await?;
+println!("Current tip: height={}, hash={}", height, hash);
+
+// Get block at specific height
+let block = chain.get_block(&hash, height - 1).await?;
+println!("Previous block hash: {}", block.block_hash());
+```
+
+#### Chain Monitoring
+
+```rust
+use blocktalk::{BlockTalk, NotificationHandler, ChainNotification};
+use async_trait::async_trait;
+
+struct BlockMonitor;
+
+#[async_trait]
+impl NotificationHandler for BlockMonitor {
+    async fn handle_notification(&self, notification: ChainNotification) -> Result<(), BlockTalkError> {
+        match notification {
+            ChainNotification::BlockConnected(block) => {
+                println!("New block: {}", block.block_hash());
+            }
+            ChainNotification::TransactionAddedToMempool(tx) => {
+                println!("New mempool tx: {}", tx.txid());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
+    
+    // Register handler and subscribe
+    blocktalk.chain().register_handler(Arc::new(BlockMonitor)).await;
+    blocktalk.chain().subscribe_to_notifications().await?;
+
+    // Keep running until Ctrl+C
+    tokio::signal::ctrl_c().await?;
+    Ok(())
+}
+```
+
+### Try Out Examples
+
+```bash 
 cargo run --example chain_query
+```
+
+<details>
+<summary> sample output </summary>
+
+```
+⏳ Connecting to Bitcoin node...
+✅ Connected successfully!
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                              Current Chain Tip                             ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ Height │ 267                                                               ║
+╟────────┼───────────────────────────────────────────────────────────────────╢
+║ Hash   │ 3e6033329b2c77f249afe44b4444b18c133f587684fe84b21071a3653bae051e  ║
+╚════════╧═══════════════════════════════════════════════════════════════════╝
+
+╔═════════════════════════════════════════════════════════════════════════════════╗
+║                                   Block Details                                 ║
+╠═════════════════════════════════════════════════════════════════════════════════╣
+║ Hash         │ 3e6033329b2c77f249afe44b4444b18c133f587684fe84b21071a3653bae051e ║
+╟──────────────┼──────────────────────────────────────────────────────────────────╢
+║ Prev Block   │ 60cda1ced332983c6a399bd22a12852ccd87650f34b51ac3a50384c77c54fdb4 ║
+║ Merkle Root  │ 16c58a40955eff72595005a57af39af83450d76c5d932742522198c49b51962f ║
+║ Timestamp    │ 1740248760                                                       ║
+║ Nonce        │ 0                                                                ║
+║ TX Count     │ 1                                                                ║
+╟──────────────┴──────────────────────────────────────────────────────────────────╢
+║                                 Transactions                                    ║
+╠═════════════════════════════════════════════════════════════════════════════════╣
+║ TX #1                                                                           ║
+║ ├─ TXID      │ 16c58a40955eff72595005a57af39af83450d76c5d932742522198c49b51962f ║
+║ ├─ Inputs    │ 1                                                                ║
+║ ├─ Outputs   │ 2                                                                ║
+║ └─ Sample Out│ 25 BTC satoshis                                                  ║
+║     [Coinbase Transaction]                                                      ║
+╟─────────────────────────────────────────────────────────────────────────────────╢
+║ Block Size   │ 250 bytes                                                        ║
+╚═════════════════════════════════════════════════════════════════════════════════╝
+```
+</details>
+
+```bash 
+cargo run --example monitor
+```
+
+<details>
+<summary> sample output </summary>
+
+```
+✅ Connected successfully!
+🔍 Monitoring blockchain events. Press Ctrl+C to exit.
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         Transaction Added to Mempool                         ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ TXID         │ 55c8771b606609f1f6f8d3e15f01bfc1af3c6e43feeb4fd4271adf67a5844115 ║
+║ Inputs       │ 1                                                            ║
+║ Outputs      │ 1                                                            ║
+╚══════════════╧═══════════════════════════════════════════════════════════════╝
 ```
 
 The examples expect Bitcoin Core and BlockTalk to be in sibling directories. If you have a different setup, update the `socket_path` in `examples/chain_query.rs`:
