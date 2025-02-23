@@ -11,9 +11,9 @@ BlockTalk provides a high-level API to connect to `bitcoin-node` process, subscr
 - [x] Connect / Disconnect
 - [x] Query blockchain data 
 - [x] Subscribe to real-time blockchain events
-- [ ] Mining Interface
 - [ ] Better error handling and logging
 - [ ] Testing infrastructure
+- [ ] More interfaces
 
 ## Setup Guide
 ### Build Bitcoin Core with Multiprocess Support
