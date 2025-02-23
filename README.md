@@ -177,6 +177,7 @@ cargo run --example monitor
 ║ Outputs      │ 1                                                            ║
 ╚══════════════╧═══════════════════════════════════════════════════════════════╝
 ```
+</details>
 
 The examples expect Bitcoin Core and BlockTalk to be in sibling directories. If you have a different setup, update the `socket_path` in `examples/chain_query.rs`:
 
