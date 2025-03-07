@@ -1,0 +1,35 @@
+[package]
+name = "bitcoin-wallet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+blocktalk = { path = "../blocktalk", version = "0.1.0" }
+
+tokio = { version = "1.43", features = ["full", "tracing"] }
+async-trait = "0.1.87"
+jsonrpc-http-server = "18.0.0"
+jsonrpc-core = "18.0.0"
+jsonrpc-derive = "18.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.140"
+bitcoin = "0.32.5"
+bdk_wallet = { version = "1.1.0", features = ["rusqlite"] }
+hex = "0.4.3"
+
+thiserror = "2.0.12"
+log = "0.4"
+clap = "4.5.31"
+chrono = "0.4.40"
+rand = "0.8"
+
+env_logger = "0.10"
+dirs = "5.0"
+
+[lib]
+name = "bitcoin_wallet"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bitcoin-wallet"
+path = "src/main.rs"
