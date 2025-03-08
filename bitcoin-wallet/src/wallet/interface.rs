@@ -14,7 +14,7 @@ use super::types::{TransactionMetadata, WalletBalance, TxRecipient};
 pub struct WalletInterface {
     wallet: Arc<RwLock<PersistedWallet<rusqlite::Connection>>>,
     db: WalletDatabase,
-    blocktalk: Arc<blocktalk::BlockTalk>,
+    // blocktalk: Arc<blocktalk::BlockTalk>,
     network: Network,
     // tx_builder: TransactionBuilder,
     // tx_broadcaster: TransactionBroadcaster,
@@ -22,7 +22,6 @@ pub struct WalletInterface {
 }
 
 impl WalletInterface {
-    /// Create a new wallet interface
     pub async fn new(
         wallet_path: &Path,
         node_socket: &str,
@@ -32,8 +31,8 @@ impl WalletInterface {
         
         // let (tx, rx) = mpsc::channel(100);
         
-        let blocktalk = Arc::new(blocktalk::BlockTalk::init(node_socket).await?);
-        log::info!("Connected to Bitcoin node via blocktalk");
+        // let blocktalk = Arc::new(blocktalk::BlockTalk::init(node_socket).await?);
+        // log::info!("Connected to Bitcoin node via blocktalk");
         
         let db_path = wallet_path.with_extension("sqlite3");
         let db = WalletDatabase::new(db_path.to_owned());
@@ -56,7 +55,7 @@ impl WalletInterface {
         let wallet_interface = Arc::new(Self {
             wallet,
             db,
-            blocktalk: blocktalk.clone(),
+            // blocktalk: blocktalk.clone(),
             network,
             // tx_builder,
             // tx_broadcaster,
@@ -84,14 +83,14 @@ impl WalletInterface {
     }
     
     pub async fn process_block(&self, block: &Block) -> Result<(), WalletError> {
-        let block_height = (self.blocktalk.chain().get_tip().await?).0;
-        let block_hash = block.block_hash();
+        // let block_height = (self.blocktalk.chain().get_tip().await?).0;
+        // let block_hash = block.block_hash();
         
-        log::debug!("Processing block {} at height {}", block_hash, block_height);
+        // log::debug!("Processing block {} at height {}", block_hash, block_height);
         
-        for tx in &block.txdata {
-            self.process_transaction(tx, Some(block_height)).await?;
-        }
+        // for tx in &block.txdata {
+        //     self.process_transaction(tx, Some(block_height)).await?;
+        // }
         
         Ok(())
     }
@@ -134,21 +133,21 @@ impl WalletInterface {
         log::info!("Syncing wallet with blockchain");
         
         // Get current tip from node
-        let (tip_height, _) = self.blocktalk.chain().get_tip().await?;
-        log::debug!("Current blockchain tip is at height {}", tip_height);
+        // let (tip_height, _) = self.blocktalk.chain().get_tip().await?;
+        // log::debug!("Current blockchain tip is at height {}", tip_height);
         
-        // Rescan blockchain for relevant transactions
-        let start_height = 0; // In a real implementation, we would store the last synced height
+        // // Rescan blockchain for relevant transactions
+        // let start_height = 0; // In a real implementation, we would store the last synced height
         
-        for height in start_height..=tip_height {
-            // Get block at height
-            if let Ok((_, tip_hash)) = self.blocktalk.chain().get_tip().await {
-                if let Ok(block) = self.blocktalk.chain().get_block(&tip_hash, height).await {
-                    // Process the block
-                    self.process_block(&block).await?;
-                }
-            }
-        }
+        // for height in start_height..=tip_height {
+        //     // Get block at height
+        //     if let Ok((_, tip_hash)) = self.blocktalk.chain().get_tip().await {
+        //         if let Ok(block) = self.blocktalk.chain().get_block(&tip_hash, height).await {
+        //             // Process the block
+        //             self.process_block(&block).await?;
+        //         }
+        //     }
+        // }
         
         log::info!("Wallet sync completed");
         Ok(())

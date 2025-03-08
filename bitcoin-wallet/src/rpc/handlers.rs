@@ -19,6 +19,7 @@ pub fn register_wallet_methods(io: &mut IoHandler, wallet: Arc<WalletInterface>)
 
 fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getwalletinfo", move |_params| {
+        log::info!("Getting wallet info…");
         // match wallet.get_balance() {
         //     Ok(balance) => {
         //         let result = json!({
@@ -47,6 +48,7 @@ fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getnewaddress", move |params: Params| {
+        log::info!("Getting new address");
         // Parse parameters
         // let (label, address_type) = match params {
         //     Params::Array(arr) => {
@@ -85,6 +87,7 @@ fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getbalance", move |params: Params| {
+        log::info!("Getting balance");
         // Parse parameters
         // let (dummy, minconf, include_watchonly, avoid_reuse) = match params {
         //     Params::Array(arr) => {
@@ -123,6 +126,7 @@ fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listunspent", move |_params: Params| {
+        log::info!("Listing unspent");
         // In a real implementation, we would:
         // 1. Get UTXOs from the wallet
         // 2. Filter by confirmations, addresses, etc.
@@ -135,6 +139,8 @@ fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listtransactions", move |params: Params| {
+        log::info!("Listing transactions…");
+
         // Parse parameters
         let (label, count, skip, include_watchonly) = match params {
             Params::Array(arr) => {
@@ -194,6 +200,7 @@ fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_gettransaction(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("gettransaction", move |params: Params| {
+        log::info!("Getting transaction…");
         // Parse parameters
         // let (txid_str, include_watchonly) = match params {
         //     Params::Array(arr) => {
@@ -254,6 +261,7 @@ fn register_gettransaction(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_sendtoaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("sendtoaddress", move |params: Params| {
+        log::info!("Sending to address…");
         // Parse parameters
         // let (address_str, amount, comment, comment_to, subtract_fee, avoid_reuse, fee_rate) = match params {
         //     Params::Array(arr) => {

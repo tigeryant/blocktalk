@@ -168,11 +168,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        log::info!("Performing initial wallet sync");
-        if let Err(e) = wallet.sync().await {
-            eprintln!("Initial wallet sync failed: {}", e);
-            process::exit(1);
-        }
+        // log::info!("Performing initial wallet sync");
+        // if let Err(e) = wallet.sync().await {
+        //     eprintln!("Initial wallet sync failed: {}", e);
+        //     process::exit(1);
+        // }
 
         log::info!("Starting RPC server on {}", rpc_addr);
         let mut rpc_server = RPCServer::new(wallet, &config.rpc);
