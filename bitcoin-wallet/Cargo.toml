@@ -14,7 +14,7 @@ jsonrpc-derive = "18.0.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.140"
 bitcoin = "0.32.5"
-bdk_wallet = { version = "1.1.0", features = ["rusqlite"] }
+bdk_wallet = { version = "1.1.0", features = ["keys-bip39"] }
 hex = "0.4.3"
 
 thiserror = "2.0.12"

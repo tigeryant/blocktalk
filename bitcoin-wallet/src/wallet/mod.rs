@@ -5,9 +5,9 @@ mod transaction;
 mod types;
 mod config;
 
-pub use database::WalletDatabase;
+// pub use database::WalletDatabase;
 pub use interface::WalletInterface;
 // pub use notification::NotificationProcessor;
 // pub use transaction::{TransactionBuilder, TransactionBroadcaster};
-pub use types::{TxRecipient, WalletBalance};
+pub use types::{TxRecipient, WalletBalance, CreateWalletOptions};
 pub use config::{WalletConfig, DatabaseConfig};

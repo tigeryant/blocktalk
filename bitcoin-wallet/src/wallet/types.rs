@@ -62,3 +62,27 @@ pub(crate) enum WalletEvent {
     /// A request to sync the wallet was received
     SyncRequested,
 }
+
+pub struct CreateWalletOptions {
+    pub wallet_name: String,
+    pub disable_private_keys: bool,
+    pub blank: bool,
+    pub passphrase: Option<String>,
+    pub avoid_reuse: bool,
+    pub descriptors: bool,
+    pub load_on_startup: bool,
+}
+
+impl Default for CreateWalletOptions {
+    fn default() -> Self {
+        Self {
+            wallet_name: String::new(),
+            disable_private_keys: false,
+            blank: false,
+            passphrase: None,
+            avoid_reuse: false,
+            descriptors: true,
+            load_on_startup: false,
+        }
+    }
+}

@@ -1,21 +1,29 @@
-use std::path::Path;
-use std::sync::{Arc, RwLock};
-use bitcoin::{Address, Block, Network, Transaction, psbt::Psbt};
-use bdk_wallet::{KeychainKind, PersistedWallet, rusqlite};
-use tokio::sync::mpsc;
-use rand::{self, Rng};
+use bdk_wallet::chain::local_chain::CheckPoint;
+use bdk_wallet::{KeychainKind, Wallet};
+use bdk_wallet::keys::{DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, 
+    bip39::{ Mnemonic, Language} 
+};
+use std::collections::HashMap;
 
-use crate::error::WalletError;
-use super::database::WalletDatabase;
+use bitcoin::{psbt::Psbt, Address, Block, Network, Transaction};
+use rand::{self, Rng};
+use std::path::Path;
+use std::sync::{Arc, RwLock, Mutex};
+use tokio::sync::mpsc;
+
+// use super::database::WalletDatabase;
 use super::notification::NotificationProcessor;
+use crate::error::WalletError;
+use blocktalk::BlockTalk;
 // use super::transaction::{TransactionBuilder, TransactionBroadcaster};
-use super::types::{TransactionMetadata, WalletBalance, TxRecipient};
+use super::types::{CreateWalletOptions, TransactionMetadata, TxRecipient, WalletBalance};
 
 pub struct WalletInterface {
-    wallet: Arc<RwLock<PersistedWallet<rusqlite::Connection>>>,
-    db: WalletDatabase,
-    // blocktalk: Arc<blocktalk::BlockTalk>,
+    wallet: Arc<RwLock<Option<Arc<RwLock<Wallet>>>>>,
+    // db: WalletDatabase,
+    node_socket: String,  // Store connection string instead of BlockTalk instance
     network: Network,
+    wallets: Arc<RwLock<HashMap<String, Arc<RwLock<Wallet>>>>>,
     // tx_builder: TransactionBuilder,
     // tx_broadcaster: TransactionBroadcaster,
     // notification_tx: mpsc::Sender<WalletEvent>,
@@ -27,91 +35,101 @@ impl WalletInterface {
         node_socket: &str,
         network: Network,
     ) -> Result<Arc<Self>, WalletError> {
-        log::info!("Initializing wallet with network: {:?}", network);
-        
-        // let (tx, rx) = mpsc::channel(100);
-        
-        // let blocktalk = Arc::new(blocktalk::BlockTalk::init(node_socket).await?);
-        // log::info!("Connected to Bitcoin node via blocktalk");
-        
-        let db_path = wallet_path.with_extension("sqlite3");
-        let db = WalletDatabase::new(db_path.to_owned());
-        
-        let wallet = if db.exists() {
-            log::info!("Loading existing wallet from {}", db_path.display());
-            db.load_wallet(network)?
-        } else {
-            log::info!("Creating new wallet at {}", db_path.display());
-            let (external_desc, internal_desc) = generate_descriptors(network)?;
-            db.create_wallet(external_desc, internal_desc, network)?
-        };
-        
-        let wallet = Arc::new(RwLock::new(wallet));
-        
-        // let tx_builder = TransactionBuilder::new(wallet.clone(), db.clone());
-        // let tx_broadcaster = TransactionBroadcaster::new(db.clone(), blocktalk.clone());
-        
-        // Create wallet interface
+        log::info!("Initializing wallet interface with network: {:?}", network);
+
         let wallet_interface = Arc::new(Self {
-            wallet,
-            db,
-            // blocktalk: blocktalk.clone(),
+            wallet: Arc::new(RwLock::new(None)),
+            node_socket: node_socket.to_string(),
             network,
-            // tx_builder,
-            // tx_broadcaster,
-            // notification_tx: tx,
+            wallets: Arc::new(RwLock::new(HashMap::new())),
         });
-        
-        // let wallet_handler = WalletNotificationHandler::new(
-        //     wallet_interface.clone(),
-        //     tx.clone(),
-        // );
-        
-        // blocktalk
-        //     .chain()
-        //     .register_handler(Arc::new(wallet_handler))
-        //     .await;
-        
-        // blocktalk.chain().subscribe_to_notifications().await?;
-        // log::info!("Registered for blockchain notifications");
-        
-        // Start notification processor
-        // let processor = NotificationProcessor::new(wallet_interface.clone(), rx);
-        // processor.start();
-        
+
         Ok(wallet_interface)
     }
-    
-    pub async fn process_block(&self, block: &Block) -> Result<(), WalletError> {
-        // let block_height = (self.blocktalk.chain().get_tip().await?).0;
-        // let block_hash = block.block_hash();
-        
-        // log::debug!("Processing block {} at height {}", block_hash, block_height);
-        
-        // for tx in &block.txdata {
-        //     self.process_transaction(tx, Some(block_height)).await?;
-        // }
-        
+
+    async fn get_blocktalk(&self) -> Result<BlockTalk, WalletError> {
+        BlockTalk::init(&self.node_socket).await.map_err(WalletError::from)
+    }
+
+    pub fn create_wallet(&self, options: CreateWalletOptions) -> Result<(), WalletError> {
+        let (external_descriptor, internal_descriptor) = if options.blank {
+            ("wpkh()".to_string(), "wpkh()".to_string())
+        } else {
+            generate_descriptors(self.network)?
+        };
+
+        let mut wallet_builder = Wallet::create(external_descriptor, internal_descriptor)
+            .network(self.network);
+
+        if options.disable_private_keys {
+            // wallet_builder = wallet_builder.disable_private_keys();
+        }
+
+        if options.descriptors {
+            // wallet_builder = wallet_builder.descriptors();
+        }
+
+        let wallet = Arc::new(RwLock::new(wallet_builder.create_wallet_no_persist().unwrap()));
+
+        // Store the wallet under the given name and set as current wallet
+        let wallet_name = options.wallet_name.clone();
+        {
+            let mut wallets = self.wallets.write().unwrap();
+            wallets.insert(wallet_name.clone(), wallet.clone());
+        }
+        {
+            let mut current_wallet = self.wallet.write().unwrap();
+            *current_wallet = Some(wallet);
+        }
+
+        log::info!("Created wallet: {}", wallet_name);
         Ok(())
     }
+
+    pub fn load_wallet(&self, wallet_name: &str) -> Result<(), WalletError> {
+        let wallet = {
+            let wallets = self.wallets.read().unwrap(); // Use read lock for lookup
+            wallets
+                .get(wallet_name)
+                .cloned() // Clone the Wallet to use outside the lock
+                .ok_or_else(|| WalletError::Generic(format!("Wallet not found: {}", wallet_name)))?
+        };
     
+        {
+            let mut current_wallet = self.wallet.write().unwrap();
+            *current_wallet = Some(wallet);
+        }
+    
+        log::info!("Loaded wallet: {}", wallet_name);
+        self.sync_wallet();
+        Ok(())
+    }
+
+    pub fn get_current_wallet(&self) -> Result<Arc<RwLock<Wallet>>, WalletError> {
+        let wallet_lock = self.wallet.read().unwrap();
+        wallet_lock.clone().ok_or(WalletError::Generic("No wallet loaded".to_string()))
+    }
+
     pub async fn process_transaction(
-        &self, 
-        tx: &Transaction, 
-        block_height: Option<i32>
+        &self,
+        tx: &Transaction,
+        block_height: Option<i32>,
     ) -> Result<(), WalletError> {
         let txid = tx.txid();
         log::debug!("Processing transaction {}", txid);
-        
-        let wallet = self.wallet.write().unwrap();
-        
+
+        let wallet = self.get_current_wallet()?;
+        let wallet_guard = wallet.write().unwrap();
+
         // Check if any output script belongs to us
-        let is_relevant = tx.output.iter()
-            .any(|output| wallet.is_mine(output.script_pubkey.clone()));
-            
+        let is_relevant = tx
+            .output
+            .iter()
+            .any(|output| wallet_guard.is_mine(output.script_pubkey.clone()));
+
         if is_relevant {
             log::info!("Found relevant transaction: {}", txid);
-            
+
             // Store transaction metadata
             let timestamp = chrono::Utc::now().timestamp() as u64;
             let metadata = TransactionMetadata {
@@ -121,54 +139,63 @@ impl WalletInterface {
                 comment: String::new(),
                 label: String::new(),
             };
-            
-            self.db.store_tx_metadata(&txid, &metadata)?;
+
+            // self.db.store_tx_metadata(&txid, &metadata)?;
         }
-        
+
         Ok(())
     }
-    
-    /// Synchronize the wallet with the blockchain
-    pub async fn sync(&self) -> Result<(), WalletError> {
+
+    pub async fn sync_wallet(&self) -> Result<(), WalletError> {
         log::info!("Syncing wallet with blockchain");
-        
-        // Get current tip from node
-        // let (tip_height, _) = self.blocktalk.chain().get_tip().await?;
-        // log::debug!("Current blockchain tip is at height {}", tip_height);
-        
-        // // Rescan blockchain for relevant transactions
-        // let start_height = 0; // In a real implementation, we would store the last synced height
-        
-        // for height in start_height..=tip_height {
-        //     // Get block at height
-        //     if let Ok((_, tip_hash)) = self.blocktalk.chain().get_tip().await {
-        //         if let Ok(block) = self.blocktalk.chain().get_block(&tip_hash, height).await {
-        //             // Process the block
-        //             self.process_block(&block).await?;
-        //         }
-        //     }
-        // }
-        
+
+        let blocktalk = self.get_blocktalk().await?;
+        let (tip_height, tip_hash) = blocktalk.chain().get_tip().await?;
+        log::debug!("Current blockchain tip is at height {}", tip_height);
+
+        let wallet = self.get_current_wallet()?;
+        let mut wallet_guard = wallet.write().unwrap();
+        let wallet_tip: CheckPoint = wallet_guard.latest_checkpoint();
+        log::debug!(
+            "Current wallet tip is: {} at height {}",
+            &wallet_tip.hash(),
+            &wallet_tip.height()
+        );
+
+        let start_height = 0;
+
+        for height in start_height..=tip_height {
+            if let Ok(block) = blocktalk.chain().get_block(&tip_hash, height).await {
+                wallet_guard.apply_block(&block, height as u32).unwrap();
+            }
+        }
+
+        //TODO: Sync with mempool
         log::info!("Wallet sync completed");
         Ok(())
     }
-    
-    /// Get a new receiving address from the wallet
+
     pub fn get_new_address(&self, label: Option<&str>) -> Result<Address, WalletError> {
-        let mut wallet = self.wallet.write().unwrap();
-        let address_info = wallet.reveal_next_address(KeychainKind::External);
-        
+        let wallet = self.get_current_wallet()?;
+        let mut wallet_guard = wallet.write().unwrap();
+        let address_info = wallet_guard.reveal_next_address(KeychainKind::External);
+
         if let Some(label_text) = label {
-            log::debug!("Labeling address {} as '{}'", address_info.address, label_text);
+            log::debug!(
+                "Labeling address {} as '{}'",
+                address_info.address,
+                label_text
+            );
         }
-        
+
         Ok(address_info.address)
     }
 
     pub fn get_balance(&self) -> Result<WalletBalance, WalletError> {
-        let wallet = self.wallet.read().unwrap();
-        let bdk_balance = wallet.balance();
-            
+        let wallet = self.get_current_wallet()?;
+        let wallet_guard = wallet.read().unwrap();
+        let bdk_balance = wallet_guard.balance();
+
         Ok(WalletBalance {
             confirmed: bdk_balance.confirmed,
             unconfirmed: bdk_balance.untrusted_pending,
@@ -176,7 +203,7 @@ impl WalletInterface {
             total: bdk_balance.confirmed + bdk_balance.untrusted_pending + bdk_balance.immature,
         })
     }
-    
+
     // pub fn create_transaction(
     //     &self,
     //     recipients: &[TxRecipient],

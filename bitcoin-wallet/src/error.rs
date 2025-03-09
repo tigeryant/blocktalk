@@ -48,6 +48,13 @@ pub enum WalletError {
     /// Generic error
     #[error("{0}")]
     Generic(String),
+    
+    /// Passphrase error
+    #[error("Passphrase error: {0}")]
+    PassphraseError(String),
+    
+    // #[error("BDK error: {0}")]
+    // BDKError(#[from] bdk_wallet::error::E),
 }
 
 impl From<jsonrpc_core::Error> for WalletError {
