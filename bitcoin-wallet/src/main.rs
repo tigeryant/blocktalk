@@ -75,13 +75,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             clap::Arg::new("regtest")
                 .long("regtest")
                 .help("Use regression test network")
-                .value_parser(clap::value_parser!(bool)),
+                .value_parser(clap::value_parser!(bool))
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             clap::Arg::new("testnet")
                 .long("testnet")
                 .help("Use testnet")
-                .value_parser(clap::value_parser!(bool)),
+                .value_parser(clap::value_parser!(bool))
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             clap::Arg::new("node-socket")
