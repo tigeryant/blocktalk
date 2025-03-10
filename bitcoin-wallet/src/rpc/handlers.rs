@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bitcoin::{Address, Amount, Txid};
 use jsonrpc_core::{Error as RpcError, IoHandler, Params, Value};
 use serde_json::json;
+use tokio::task::{self, LocalSet};
 
 use super::error::rpc_error_from_wallet_error;
 use crate::wallet::{CreateWalletOptions, WalletInterface};
@@ -112,6 +113,7 @@ fn register_createwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterfa
 
 fn register_loadwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface>) {
     io.add_sync_method("loadwallet", move |params: Params| {
+        log::debug!("Handling loadwallet request in thread {:?}", std::thread::current().id());
         let wallet_interface = wallet_interface.clone();
         let wallet_name = match params {
             Params::Array(arr) => arr
@@ -122,14 +124,25 @@ fn register_loadwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface
             _ => return Err(RpcError::invalid_params("Invalid parameters")),
         };
 
-        match wallet_interface.load_wallet(&wallet_name) {
-            Ok(_) => {
-                let result = json!({
-                    "name": wallet_name,
-                    "warning": ""
-                });
-                Ok(result)
-            }
+        // Use spawn_blocking to run the async operation in a separate thread
+        match task::block_in_place(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            
+            let local = LocalSet::new();
+            rt.block_on(async {
+                local.run_until(async {
+                    log::debug!("Inside async block in thread {:?}", std::thread::current().id());
+                    wallet_interface.load_wallet(&wallet_name).await
+                }).await
+            })
+        }) {
+            Ok(_) => Ok(json!({
+                "name": wallet_name,
+                "warning": ""
+            })),
             Err(e) => Err(rpc_error_from_wallet_error(e)),
         }
     });
@@ -167,7 +180,6 @@ fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getnewaddress", move |params: Params| {
         log::info!("Getting new address");
-        // Parse parameters
         let (label, address_type) = match params {
             Params::Array(arr) => {
                 let label = arr.get(0).and_then(|v| v.as_str()).map(String::from);
@@ -182,19 +194,16 @@ fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
             _ => (None, None),
         };
 
-        // // Validate address type
         if let Some(atype) = &address_type {
             if !["legacy", "p2sh-segwit", "bech32"].contains(&atype.as_str()) {
                 return Err(RpcError::invalid_params("Invalid address type"));
             }
 
-            // For simplicity, we'll ignore address_type and always return a bech32 address
             if atype != "bech32" {
                 log::warn!("Ignoring address_type={}, always returning bech32", atype);
             }
         }
 
-        // // Get new address
         match wallet.get_new_address(label.as_deref()) {
             Ok(address) => Ok(Value::String(address.to_string())),
             Err(e) => Err(rpc_error_from_wallet_error(e)),
@@ -219,12 +228,6 @@ fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listunspent", move |_params: Params| {
         log::info!("Listing unspent");
-        // In a real implementation, we would:
-        // 1. Get UTXOs from the wallet
-        // 2. Filter by confirmations, addresses, etc.
-        // 3. Format them as expected by Bitcoin Core
-
-        // For now, return an empty array
         Ok(Value::Array(vec![]))
     });
 }
@@ -233,7 +236,6 @@ fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listtransactions", move |params: Params| {
         log::info!("Listing transactions…");
 
-        // Parse parameters
         let (label, count, skip, include_watchonly) = match params {
             Params::Array(arr) => {
                 let label = arr.get(0).and_then(|v| v.as_str()).map(String::from);

@@ -86,7 +86,7 @@ impl WalletInterface {
         Ok(())
     }
 
-    pub fn load_wallet(&self, wallet_name: &str) -> Result<(), WalletError> {
+    pub async fn load_wallet(&self, wallet_name: &str) -> Result<(), WalletError> {
         let wallet = {
             let wallets = self.wallets.read().unwrap(); // Use read lock for lookup
             wallets
@@ -101,7 +101,7 @@ impl WalletInterface {
         }
     
         log::info!("Loaded wallet: {}", wallet_name);
-        self.sync_wallet();
+        self.sync_wallet().await?;
         Ok(())
     }
 
@@ -151,12 +151,12 @@ impl WalletInterface {
 
         let blocktalk = self.get_blocktalk().await?;
         let (tip_height, tip_hash) = blocktalk.chain().get_tip().await?;
-        log::debug!("Current blockchain tip is at height {}", tip_height);
+        log::info!("Current blockchain tip is at height {}", tip_height);
 
         let wallet = self.get_current_wallet()?;
         let mut wallet_guard = wallet.write().unwrap();
         let wallet_tip: CheckPoint = wallet_guard.latest_checkpoint();
-        log::debug!(
+        log::info!(
             "Current wallet tip is: {} at height {}",
             &wallet_tip.hash(),
             &wallet_tip.height()
