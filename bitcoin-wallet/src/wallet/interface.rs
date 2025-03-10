@@ -1,5 +1,5 @@
 use bdk_wallet::chain::local_chain::CheckPoint;
-use bdk_wallet::{KeychainKind, Wallet};
+use bdk_wallet::{KeychainKind, Wallet, LocalOutput};
 use bdk_wallet::keys::{DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, 
     bip39::{ Mnemonic, Language} 
 };
@@ -166,6 +166,7 @@ impl WalletInterface {
 
         for height in start_height..=tip_height {
             if let Ok(block) = blocktalk.chain().get_block(&tip_hash, height).await {
+                log::info!("Applying block at height {}", height);
                 wallet_guard.apply_block(&block, height as u32).unwrap();
             }
         }
@@ -202,6 +203,18 @@ impl WalletInterface {
             immature: bdk_balance.immature,
             total: bdk_balance.confirmed + bdk_balance.untrusted_pending + bdk_balance.immature,
         })
+    }
+
+    pub fn list_unspent(&self) -> Result<Vec<LocalOutput>, WalletError> {
+        let wallet = self.get_current_wallet()?;
+        let wallet_guard = wallet.read().unwrap();
+        Ok(wallet_guard.list_unspent().collect())
+    }
+
+    pub fn list_transactions(&self) -> Result<Vec<Transaction>, WalletError> {
+        let wallet = self.get_current_wallet()?;
+        let wallet_guard = wallet.read().unwrap();
+        Ok(wallet_guard.transactions().map(|tx| (*tx.tx_node.tx).clone()).collect())
     }
 
     // pub fn create_transaction(

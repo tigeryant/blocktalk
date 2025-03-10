@@ -228,7 +228,15 @@ fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listunspent", move |_params: Params| {
         log::info!("Listing unspent");
-        Ok(Value::Array(vec![]))
+        match wallet.list_unspent() {
+            Ok(unspent) => {
+                let result = json!({
+                    "result": unspent
+                });
+                Ok(result)
+            }
+            Err(e) => Err(rpc_error_from_wallet_error(e)),
+        }
     });
 }
 
@@ -236,78 +244,15 @@ fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listtransactions", move |params: Params| {
         log::info!("Listing transactions…");
 
-        let (label, count, skip, include_watchonly) = match params {
-            Params::Array(arr) => {
-                let label = arr.get(0).and_then(|v| v.as_str()).map(String::from);
-                let count = arr
-                    .get(1)
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as usize)
-                    .unwrap_or(10);
-                let skip = arr
-                    .get(2)
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as usize)
-                    .unwrap_or(0);
-                let include_watchonly = arr.get(3).and_then(|v| v.as_bool()).unwrap_or(false);
-                (label, count, skip, include_watchonly)
+        match wallet.list_transactions() {
+            Ok(transactions) => {
+                let result = json!({
+                    "result": transactions
+                });
+                Ok(result)
             }
-            Params::Map(map) => {
-                let label = map.get("label").and_then(|v| v.as_str()).map(String::from);
-                let count = map
-                    .get("count")
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as usize)
-                    .unwrap_or(10);
-                let skip = map
-                    .get("skip")
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as usize)
-                    .unwrap_or(0);
-                let include_watchonly = map
-                    .get("include_watchonly")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                (label, count, skip, include_watchonly)
-            }
-            _ => (None, 10, 0, false),
-        };
-
-        // Get transactions
-        // match wallet.list_transactions(Some(count), Some(skip), include_watchonly) {
-        //     Ok(txs) => {
-        //         let mut result = Vec::new();
-        //         for tx in txs {
-        //             // Skip transactions with labels that don't match
-        //             if let Some(ref l) = label {
-        //                 if tx.label != *l {
-        //                     continue;
-        //                 }
-        //             }
-
-        //             let tx_obj = json!({
-        //                 "address": "", // Would need to derive from tx
-        //                 "category": if tx.amount.is_negative() { "send" } else { "receive" },
-        //                 "amount": tx.amount.to_btc(),
-        //                 "label": tx.label,
-        //                 "vout": 0, // Would need tx details
-        //                 "confirmations": tx.confirmations,
-        //                 "blockhash": tx.blockhash.map(|h| h.to_string()).unwrap_or_default(),
-        //                 "blockheight": tx.blockheight.unwrap_or(0),
-        //                 "blocktime": tx.timestamp,
-        //                 "txid": tx.txid.to_string(),
-        //                 "time": tx.timestamp,
-        //                 "timereceived": tx.timestamp,
-        //                 "comment": tx.comment,
-        //                 "abandoned": false,
-        //             });
-        //             result.push(tx_obj);
-        //         }
-        //         Ok(Value::Array(result))
-        //     }
-        //     Err(e) => Err(rpc_error_from_wallet_error(e)),
-        // }
-        Ok(Value::Array(vec![]))
+            Err(e) => Err(rpc_error_from_wallet_error(e)),
+        }
     });
 }
 
