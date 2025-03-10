@@ -1,11 +1,8 @@
-use bdk_wallet::chain::local_chain::CheckPoint;
-use bdk_wallet::{KeychainKind, Wallet, LocalOutput, PersistedWallet};
-
-use bitcoin::{psbt::Psbt, Address, Block, Network, Transaction};
+use bdk_wallet::{KeychainKind, LocalOutput};
+use bitcoin::{Address, Network, Transaction};
 use rand::{self, Rng};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, Mutex};
-use bdk_wallet::rusqlite;
 
 use super::database::WalletDatabase;
 use super::notification::NotificationProcessor;
@@ -101,7 +98,7 @@ impl WalletInterface {
         log::debug!("Processing transaction {}", txid);
 
         let wallet = self.get_current_wallet()?;
-        let mut wallet_guard = wallet.lock().unwrap();
+        let wallet_guard = wallet.lock().unwrap();
 
         // Check if any output script belongs to us
         let is_relevant = tx
@@ -147,27 +144,34 @@ impl WalletInterface {
 
         let blocktalk = self.get_blocktalk().await?;
         let (tip_height, tip_hash) = blocktalk.chain().get_tip().await?;
-        log::info!("Current blockchain tip is at height {}", tip_height);
+        log::info!("Current blockchain tip is at height {} with hash {}", tip_height, tip_hash);
 
         let wallet = self.get_current_wallet()?;
         let mut wallet_guard = wallet.lock().unwrap();
         let wallet_tip = wallet_guard.latest_checkpoint();
         log::info!(
-            "Current wallet tip is: {} at height {}",
+            "Wallet tip is: {} at height {}",
             &wallet_tip.hash(),
             &wallet_tip.height()
         );
 
         let start_height = wallet_tip.height() as i32 + 1;
 
+        log::info!("🔄 Syncing wallet with blockchain");
         for height in start_height..=tip_height {
             if let Ok(block) = blocktalk.chain().get_block(&tip_hash, height).await {
-                log::info!("Applying block at height {}", height);
-                wallet_guard.apply_block(&block, height as u32);
+                wallet_guard.apply_block(&block, height as u32)
+                    .map_err(|e| WalletError::Generic(format!("Failed to apply block: {}", e)))?;
             }
         }
 
-        log::info!("Wallet sync completed");
+        log::info!("✅ Wallet sync completed");
+        let wallet_tip = wallet_guard.latest_checkpoint();
+        log::info!(
+            "Wallet tip is: {} at height {}",
+            &wallet_tip.hash(),
+            &wallet_tip.height()
+        );
         Ok(())
     }
 
@@ -193,7 +197,7 @@ impl WalletInterface {
 
     pub fn get_balance(&self) -> Result<WalletBalance, WalletError> {
         let wallet = self.get_current_wallet()?;
-        let mut wallet_guard = wallet.lock().unwrap();
+        let wallet_guard = wallet.lock().unwrap();
         let bdk_balance = wallet_guard.balance();
 
         Ok(WalletBalance {
@@ -216,8 +220,48 @@ impl WalletInterface {
         Ok(wallet_guard.transactions().map(|tx| (*tx.tx_node.tx).clone()).collect())
     }
 
-    // Transaction handling methods would go here
-    // ...
+    pub async fn rescan_blockchain(&self, start_height: i32, stop_height: Option<i32>) -> Result<(i32, i32), WalletError> {
+        log::info!("Rescanning blockchain from height {} to {:?}", start_height, stop_height);
+        
+        let blocktalk = self.get_blocktalk().await?;
+        let (tip_height, tip_hash) = blocktalk.chain().get_tip().await?;
+        log::info!("Current blockchain tip is at height {}", tip_height);
+        
+        // Determine actual stop height (default to chain tip if not specified)
+        let actual_stop_height = stop_height.unwrap_or(tip_height);
+        // Cap at chain tip
+        let actual_stop_height = std::cmp::min(actual_stop_height, tip_height);
+        
+        let wallet = self.get_current_wallet()?;
+        let mut wallet_guard = wallet.lock().unwrap();
+        
+        // For a full rescan from a specific height, we might need to disconnect blocks 
+        // and reset the wallet state to that height first
+        if start_height == 0 {
+            // Full rescan from genesis
+            log::info!("Performing full rescan from genesis");
+            // Reset wallet state would happen here in a complete implementation
+            // wallet_guard.reset_to_height(0)?;
+        } else if start_height > 0 {
+            // Partial rescan from a specific height
+            log::info!("Performing partial rescan from height {}", start_height);
+            // In a real implementation, we might need to disconnect blocks after this height
+            // wallet_guard.reset_to_height(start_height as u32)?;
+        }
+        
+        // Process blocks in the specified range
+        for height in start_height..=actual_stop_height {
+            if let Ok(block) = blocktalk.chain().get_block(&tip_hash, height as i32).await {
+                wallet_guard.apply_block(&block, height as u32)
+                    .map_err(|e| WalletError::Generic(format!("Failed to apply block during rescan: {}", e)))?;
+            } else {
+                log::warn!("Failed to retrieve block at height {}", height);
+            }
+        }
+        
+        log::info!("Blockchain rescan completed from {} to {}", start_height, actual_stop_height);
+        Ok((start_height, actual_stop_height))
+    }
 }
 
 fn generate_descriptors(network: Network) -> Result<(String, String), WalletError> {

@@ -39,7 +39,7 @@ impl RPCServer {
             .map_err(|e| WalletError::RPCError(format!("Failed to start RPC server: {}", e)))?;
         
         self.server = Some(server);
-        log::info!("RPC server started with single thread");
+        log::info!("RPC server started");
         let local = LocalSet::new();        
         local.run_until(async {
             loop {

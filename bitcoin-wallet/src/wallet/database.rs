@@ -5,7 +5,6 @@ use bitcoin::Network;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use super::types::TransactionMetadata;
 use crate::error::WalletError;
 
 const EXTERNAL_DESCRIPTOR: &str = "tr(tprv8ZgxMBicQKsPdJuLWWArdBsWjqDA3W5WoREnfdgKEcCQB1FMKfSoaFz9JHZU71HwXAqTsjHripkLM62kUQar14SDD8brsmhFKqVUPXGrZLc/86'/1'/0'/0/*)#fv8tutn2";

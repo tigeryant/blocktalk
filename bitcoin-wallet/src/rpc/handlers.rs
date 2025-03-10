@@ -19,77 +19,13 @@ pub fn register_wallet_methods(io: &mut IoHandler, wallet_interface: Arc<WalletI
     register_listtransactions(io, wallet_interface.clone());
     register_gettransaction(io, wallet_interface.clone());
     register_sendtoaddress(io, wallet_interface.clone());
-}
-
-fn parse_create_wallet_options(params: Params) -> Result<CreateWalletOptions, RpcError> {
-    let mut options = CreateWalletOptions::default();
-
-    match params {
-        Params::Array(arr) => {
-            // Required parameter: wallet_name
-            options.wallet_name = arr
-                .get(0)
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| RpcError::invalid_params("Missing wallet name parameter"))?
-                .to_string();
-
-            // Optional parameters
-            if let Some(v) = arr.get(1).and_then(|v| v.as_bool()) {
-                options.disable_private_keys = v;
-            }
-            if let Some(v) = arr.get(2).and_then(|v| v.as_bool()) {
-                options.blank = v;
-            }
-            if let Some(v) = arr.get(3).and_then(|v| v.as_str()) {
-                options.passphrase = Some(v.to_string());
-            }
-            if let Some(v) = arr.get(4).and_then(|v| v.as_bool()) {
-                options.avoid_reuse = v;
-            }
-            if let Some(v) = arr.get(5).and_then(|v| v.as_bool()) {
-                options.descriptors = v;
-            }
-            if let Some(v) = arr.get(6).and_then(|v| v.as_bool()) {
-                options.load_on_startup = v;
-            }
-        }
-        Params::Map(map) => {
-            // Required parameter: wallet_name
-            options.wallet_name = map
-                .get("wallet_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| RpcError::invalid_params("Missing wallet name parameter"))?
-                .to_string();
-
-            // Optional parameters
-            if let Some(v) = map.get("disable_private_keys").and_then(|v| v.as_bool()) {
-                options.disable_private_keys = v;
-            }
-            if let Some(v) = map.get("blank").and_then(|v| v.as_bool()) {
-                options.blank = v;
-            }
-            if let Some(v) = map.get("passphrase").and_then(|v| v.as_str()) {
-                options.passphrase = Some(v.to_string());
-            }
-            if let Some(v) = map.get("avoid_reuse").and_then(|v| v.as_bool()) {
-                options.avoid_reuse = v;
-            }
-            if let Some(v) = map.get("descriptors").and_then(|v| v.as_bool()) {
-                options.descriptors = v;
-            }
-            if let Some(v) = map.get("load_on_startup").and_then(|v| v.as_bool()) {
-                options.load_on_startup = v;
-            }
-        }
-        _ => return Err(RpcError::invalid_params("Invalid parameters")),
-    };
-
-    Ok(options)
+    register_rescanblockchain(io, wallet_interface.clone());
 }
 
 fn register_createwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface>) {
     io.add_sync_method("createwallet", move |params: Params| {
         let wallet_interface = wallet_interface.clone();
+        log::info!("=========================");
         log::info!("Creating wallet...");
 
         let options = match parse_create_wallet_options(params) {
@@ -113,7 +49,8 @@ fn register_createwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterfa
 
 fn register_loadwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface>) {
     io.add_sync_method("loadwallet", move |params: Params| {
-        log::debug!("Handling loadwallet request in thread {:?}", std::thread::current().id());
+        log::info!("=========================");
+        log::info!("Loading wallet...");
         let wallet_interface = wallet_interface.clone();
         let wallet_name = match params {
             Params::Array(arr) => arr
@@ -150,35 +87,43 @@ fn register_loadwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface
 
 fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getwalletinfo", move |_params| {
+        log::info!("=========================");
         log::info!("Getting wallet info…");
-        // match wallet.get_balance() {
-        //     Ok(balance) => {
-        //         let result = json!({
-        //             "walletname": "default",
-        //             "walletversion": 169900, // Match Bitcoin Core
-        //             "balance": balance.confirmed.to_btc(),
-        //             "unconfirmed_balance": balance.unconfirmed.to_btc(),
-        //             "immature_balance": balance.immature.to_btc(),
-        //             "txcount": 0, // Would need to count transactions
-        //             "keypoololdest": 0, // Would need to track keypool
-        //             "keypoolsize": 1000,
-        //             "keypoolsize_hd_internal": 1000,
-        //             "paytxfee": 0,
-        //             "private_keys_enabled": true,
-        //             "avoid_reuse": false,
-        //             "scanning": false,
-        //             "descriptors": true,
-        //         });
-        //         Ok(result)
-        //     }
-        //     Err(e) => Err(rpc_error_from_wallet_error(e)),
-        // }
-        Ok(Value::String("walletinfo".to_string()))
+        match wallet.get_balance() {
+            Ok(balance) => {
+                // Get transaction count
+                let tx_count = match wallet.list_transactions() {
+                    Ok(txs) => txs.len(),
+                    Err(_) => 0,
+                };
+                
+                let result = json!({
+                    "walletname": "default",
+                    "walletversion": 169900,
+                    "format": "bdk",
+                    "balance": balance.confirmed.to_btc(),
+                    "unconfirmed_balance": balance.unconfirmed.to_btc(),
+                    "immature_balance": balance.immature.to_btc(),
+                    "txcount": tx_count,
+                    "keypoololdest": 0, 
+                    "keypoolsize": 1000,
+                    "keypoolsize_hd_internal": 1000,
+                    "paytxfee": 0,
+                    "private_keys_enabled": true,
+                    "avoid_reuse": false,
+                    "scanning": false,
+                    "descriptors": true,
+                });
+                Ok(result)
+            }
+            Err(e) => Err(rpc_error_from_wallet_error(e)),
+        }
     });
 }
 
 fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getnewaddress", move |params: Params| {
+        log::info!("=========================");
         log::info!("Getting new address");
         let (label, address_type) = match params {
             Params::Array(arr) => {
@@ -214,7 +159,8 @@ fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("getbalance", move |params: Params| {
         let wallet = wallet.clone();
-        log::info!("Getting balance");
+        log::info!("=========================");
+        log::info!("💰 Getting balance");
         match wallet.get_balance() {
             Ok(balance) => {
                 let amt = balance.confirmed.to_btc();
@@ -227,7 +173,7 @@ fn register_getbalance(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listunspent", move |_params: Params| {
-        log::info!("Listing unspent");
+        log::info!("💰 Listing unspent");
         match wallet.list_unspent() {
             Ok(unspent) => {
                 let result = json!({
@@ -242,6 +188,7 @@ fn register_listunspent(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
 
 fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
     io.add_sync_method("listtransactions", move |params: Params| {
+        log::info!("=========================");
         log::info!("Listing transactions…");
 
         match wallet.list_transactions() {
@@ -251,6 +198,63 @@ fn register_listtransactions(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
                 });
                 Ok(result)
             }
+            Err(e) => Err(rpc_error_from_wallet_error(e)),
+        }
+    });
+}
+
+fn register_rescanblockchain(io: &mut IoHandler, wallet_interface: Arc<WalletInterface>) {
+    io.add_sync_method("rescanblockchain", move |params: Params| {
+        log::info!("=========================");
+        log::info!("Rescanning blockchain...");
+        
+        // Parse optional start_height and stop_height parameters
+        let (start_height, stop_height) = match params {
+            Params::Array(arr) => {
+                let start = arr.get(0).and_then(|v| v.as_i64()).unwrap_or(0);
+                let stop = arr.get(1).and_then(|v| v.as_i64());
+                (start, stop)
+            }
+            Params::Map(map) => {
+                let start = map.get("start_height").and_then(|v| v.as_i64()).unwrap_or(0);
+                let stop = map.get("stop_height").and_then(|v| v.as_i64());
+                (start, stop)
+            }
+            _ => (0, None),
+        };
+        
+        // Validate parameters
+        if start_height < 0 {
+            return Err(RpcError::invalid_params("Start height cannot be negative"));
+        }
+        
+        if let Some(stop) = stop_height {
+            if stop < start_height {
+                return Err(RpcError::invalid_params("Stop height must be greater than or equal to start height"));
+            }
+        }
+        
+        // Use our dedicated rescan_blockchain method
+        match task::block_in_place(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            
+            let local = LocalSet::new();
+            rt.block_on(async {
+                local.run_until(async {
+                    log::debug!("Starting blockchain rescan from height {}", start_height);
+                    wallet_interface.rescan_blockchain(start_height as i32, stop_height.map(|h| h as i32)).await
+                }).await
+            })
+        }) {
+            Ok((actual_start, actual_stop)) => {
+                Ok(json!({
+                    "start_height": actual_start,
+                    "stop_height": actual_stop
+                }))
+            },
             Err(e) => Err(rpc_error_from_wallet_error(e)),
         }
     });
@@ -390,4 +394,68 @@ fn register_sendtoaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
         // }
         Ok(Value::String("txid".to_string()))
     });
+}
+
+fn parse_create_wallet_options(params: Params) -> Result<CreateWalletOptions, RpcError> {
+    let mut options = CreateWalletOptions::default();
+
+    match params {
+        Params::Array(arr) => {
+            options.wallet_name = arr
+                .get(0)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| RpcError::invalid_params("Missing wallet name parameter"))?
+                .to_string();
+
+            // Optional parameters
+            if let Some(v) = arr.get(1).and_then(|v| v.as_bool()) {
+                options.disable_private_keys = v;
+            }
+            if let Some(v) = arr.get(2).and_then(|v| v.as_bool()) {
+                options.blank = v;
+            }
+            if let Some(v) = arr.get(3).and_then(|v| v.as_str()) {
+                options.passphrase = Some(v.to_string());
+            }
+            if let Some(v) = arr.get(4).and_then(|v| v.as_bool()) {
+                options.avoid_reuse = v;
+            }
+            if let Some(v) = arr.get(5).and_then(|v| v.as_bool()) {
+                options.descriptors = v;
+            }
+            if let Some(v) = arr.get(6).and_then(|v| v.as_bool()) {
+                options.load_on_startup = v;
+            }
+        }
+        Params::Map(map) => {
+            options.wallet_name = map
+                .get("wallet_name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| RpcError::invalid_params("Missing wallet name parameter"))?
+                .to_string();
+
+            // Optional parameters
+            if let Some(v) = map.get("disable_private_keys").and_then(|v| v.as_bool()) {
+                options.disable_private_keys = v;
+            }
+            if let Some(v) = map.get("blank").and_then(|v| v.as_bool()) {
+                options.blank = v;
+            }
+            if let Some(v) = map.get("passphrase").and_then(|v| v.as_str()) {
+                options.passphrase = Some(v.to_string());
+            }
+            if let Some(v) = map.get("avoid_reuse").and_then(|v| v.as_bool()) {
+                options.avoid_reuse = v;
+            }
+            if let Some(v) = map.get("descriptors").and_then(|v| v.as_bool()) {
+                options.descriptors = v;
+            }
+            if let Some(v) = map.get("load_on_startup").and_then(|v| v.as_bool()) {
+                options.load_on_startup = v;
+            }
+        }
+        _ => return Err(RpcError::invalid_params("Invalid parameters")),
+    };
+
+    Ok(options)
 }
