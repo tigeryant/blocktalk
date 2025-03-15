@@ -221,7 +221,6 @@ impl chain_notifications::Server for ChainNotificationHandler {
             // Simply log that we received the notification
             log::info!("Block tip updated - details skipped");
 
-            // Create a dummy block hash - in a real implementation you'd get this from params
             let dummy_hash = bitcoin::BlockHash::all_zeros();
 
             // Dispatch notification with dummy data

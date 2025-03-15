@@ -7,7 +7,7 @@ use bitcoin::{Amount, BlockHash, ScriptBuf, Txid};
 pub struct TxRecipient {
     /// Recipient script
     pub script: ScriptBuf,
-    
+
     /// Amount to send
     pub amount: Amount,
 }
@@ -17,13 +17,13 @@ pub struct TxRecipient {
 pub struct WalletBalance {
     /// Confirmed balance
     pub confirmed: Amount,
-    
+
     /// Unconfirmed balance (pending)
     pub unconfirmed: Amount,
-    
+
     /// Immature balance (coinbase)
     pub immature: Amount,
-    
+
     /// Total balance
     pub total: Amount,
 }
@@ -31,35 +31,19 @@ pub struct WalletBalance {
 /// Transaction metadata for wallet operations
 #[derive(Clone, Debug)]
 pub(crate) struct TransactionMetadata {
-    /// Time the transaction was received
     pub timestamp: u64,
-    
-    /// Block the transaction was confirmed in
     pub block_height: Option<u32>,
-    
-    /// Transaction fee (if sent by this wallet)
     pub fee: Option<Amount>,
-    
-    /// Transaction comment (for Bitcoin Core compatibility)
     pub comment: String,
-    
-    /// Label for the transaction
     pub label: String,
 }
 
 /// Events that trigger wallet actions
 #[derive(Debug)]
 pub(crate) enum WalletEvent {
-    /// A new block was connected to the chain
     BlockConnected(bitcoin::Block),
-    
-    /// A block was disconnected from the chain
     BlockDisconnected(BlockHash),
-    
-    /// A transaction was detected (either in a block or mempool)
     TransactionDetected(bitcoin::Transaction),
-    
-    /// A request to sync the wallet was received
     SyncRequested,
 }
 

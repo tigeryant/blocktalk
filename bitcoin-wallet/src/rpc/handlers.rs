@@ -67,13 +67,18 @@ fn register_loadwallet(io: &mut IoHandler, wallet_interface: Arc<WalletInterface
                 .enable_all()
                 .build()
                 .unwrap();
-            
+
             let local = LocalSet::new();
             rt.block_on(async {
-                local.run_until(async {
-                    log::debug!("Inside async block in thread {:?}", std::thread::current().id());
-                    wallet_interface.load_wallet(&wallet_name).await
-                }).await
+                local
+                    .run_until(async {
+                        log::debug!(
+                            "Inside async block in thread {:?}",
+                            std::thread::current().id()
+                        );
+                        wallet_interface.load_wallet(&wallet_name).await
+                    })
+                    .await
             })
         }) {
             Ok(_) => Ok(json!({
@@ -96,7 +101,7 @@ fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
                     Ok(txs) => txs.len(),
                     Err(_) => 0,
                 };
-                
+
                 let result = json!({
                     "walletname": "default",
                     "walletversion": 169900,
@@ -105,7 +110,7 @@ fn register_getwalletinfo(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
                     "unconfirmed_balance": balance.unconfirmed.to_btc(),
                     "immature_balance": balance.immature.to_btc(),
                     "txcount": tx_count,
-                    "keypoololdest": 0, 
+                    "keypoololdest": 0,
                     "keypoolsize": 1000,
                     "keypoolsize_hd_internal": 1000,
                     "paytxfee": 0,
@@ -133,7 +138,10 @@ fn register_getnewaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
             }
             Params::Map(map) => {
                 let label = map.get("label").and_then(|v| v.as_str()).map(String::from);
-                let address_type = map.get("address_type").and_then(|v| v.as_str()).map(String::from);
+                let address_type = map
+                    .get("address_type")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
                 (label, address_type)
             }
             _ => (None, None),
@@ -207,7 +215,7 @@ fn register_rescanblockchain(io: &mut IoHandler, wallet_interface: Arc<WalletInt
     io.add_sync_method("rescanblockchain", move |params: Params| {
         log::info!("=========================");
         log::info!("Rescanning blockchain...");
-        
+
         // Parse optional start_height and stop_height parameters
         let (start_height, stop_height) = match params {
             Params::Array(arr) => {
@@ -216,45 +224,52 @@ fn register_rescanblockchain(io: &mut IoHandler, wallet_interface: Arc<WalletInt
                 (start, stop)
             }
             Params::Map(map) => {
-                let start = map.get("start_height").and_then(|v| v.as_i64()).unwrap_or(0);
+                let start = map
+                    .get("start_height")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 let stop = map.get("stop_height").and_then(|v| v.as_i64());
                 (start, stop)
             }
             _ => (0, None),
         };
-        
+
         // Validate parameters
         if start_height < 0 {
             return Err(RpcError::invalid_params("Start height cannot be negative"));
         }
-        
+
         if let Some(stop) = stop_height {
             if stop < start_height {
-                return Err(RpcError::invalid_params("Stop height must be greater than or equal to start height"));
+                return Err(RpcError::invalid_params(
+                    "Stop height must be greater than or equal to start height",
+                ));
             }
         }
-        
+
         // Use our dedicated rescan_blockchain method
         match task::block_in_place(|| {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap();
-            
+
             let local = LocalSet::new();
             rt.block_on(async {
-                local.run_until(async {
-                    log::debug!("Starting blockchain rescan from height {}", start_height);
-                    wallet_interface.rescan_blockchain(start_height as i32, stop_height.map(|h| h as i32)).await
-                }).await
+                local
+                    .run_until(async {
+                        log::debug!("Starting blockchain rescan from height {}", start_height);
+                        wallet_interface
+                            .rescan_blockchain(start_height as i32, stop_height.map(|h| h as i32))
+                            .await
+                    })
+                    .await
             })
         }) {
-            Ok((actual_start, actual_stop)) => {
-                Ok(json!({
-                    "start_height": actual_start,
-                    "stop_height": actual_stop
-                }))
-            },
+            Ok((actual_start, actual_stop)) => Ok(json!({
+                "start_height": actual_start,
+                "stop_height": actual_stop
+            })),
             Err(e) => Err(rpc_error_from_wallet_error(e)),
         }
     });
@@ -289,7 +304,6 @@ fn register_gettransaction(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
         // };
 
         // Get transaction
-        // Note: This would need to be handled by a background task in a real implementation
         // match tokio::runtime::Handle::current().block_on(wallet.get_transaction(&txid)) {
         //     Ok(tx) => {
         //         let result = json!({
@@ -384,7 +398,6 @@ fn register_sendtoaddress(io: &mut IoHandler, wallet: Arc<WalletInterface>) {
         //             return Err(rpc_error_from_wallet_error(e));
         //         }
         //         // Send transaction
-        //         // Note: This would need to be handled by a background task in a real implementation
         //         match tokio::runtime::Handle::current().block_on(wallet.send_transaction(&tx)) {
         //             Ok(txid) => Ok(Value::String(txid.to_string())),
         //             Err(e) => Err(rpc_error_from_wallet_error(e)),

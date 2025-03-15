@@ -1,26 +1,22 @@
 //! Blockchain notification processing for wallet updates
 
 use async_trait::async_trait;
+use blocktalk::{ChainNotification, NotificationHandler};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use blocktalk::{ChainNotification, NotificationHandler};
 
-use crate::error::WalletError;
 use super::interface::WalletInterface;
 use super::types::WalletEvent;
+use crate::error::WalletError;
 
 /// Handler for blockchain notifications
 #[derive(Clone)]
 pub(crate) struct WalletNotificationHandler {
-    /// Reference to the wallet interface
     wallet: Arc<WalletInterface>,
-    
-    /// Channel for sending notifications to the processor
     tx: mpsc::Sender<WalletEvent>,
 }
 
 impl WalletNotificationHandler {
-    /// Create a new wallet notification handler
     pub fn new(wallet: Arc<WalletInterface>, tx: mpsc::Sender<WalletEvent>) -> Self {
         Self { wallet, tx }
     }
@@ -54,12 +50,8 @@ impl WalletNotificationHandler {
 //     }
 // }
 
-/// Processor for wallet events
 pub struct NotificationProcessor {
-    /// Wallet interface to update
     wallet: Arc<WalletInterface>,
-    
-    /// Channel for receiving wallet events
     rx: Arc<Mutex<mpsc::Receiver<WalletEvent>>>,
 }
 
@@ -71,15 +63,15 @@ pub struct NotificationProcessor {
 //             rx: Arc::new(Mutex::new(rx)),
 //         }
 //     }
-    
+
 //     /// Start processing notifications in a background task
 //     pub fn start(&self) {
 //         let wallet = self.wallet.clone();
 //         let rx = self.rx.clone();
-        
+
 //         tokio::task::spawn(async move {
 //             let mut rx_guard = rx.lock().unwrap().clone();
-            
+
 //             while let Some(event) = rx_guard.recv().await {
 //                 if let Err(e) = Self::process_event(&wallet, event).await {
 //                     log::error!("Error processing wallet event: {}", e);
@@ -87,7 +79,7 @@ pub struct NotificationProcessor {
 //             }
 //         });
 //     }
-    
+
 //     /// Process a wallet event
 //     async fn process_event(wallet: &Arc<WalletInterface>, event: WalletEvent) -> Result<(), WalletError> {
 //         match event {
