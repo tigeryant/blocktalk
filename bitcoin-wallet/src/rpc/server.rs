@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::task::LocalSet;
 
 use jsonrpc_core::IoHandler;
-use jsonrpc_http_server::hyper::{Body, Request};
 use jsonrpc_http_server::{Server, ServerBuilder};
 
 use super::config::RpcConfig;

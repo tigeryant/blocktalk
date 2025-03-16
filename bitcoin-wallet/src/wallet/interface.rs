@@ -239,10 +239,8 @@ impl WalletInterface {
         let (tip_height, tip_hash) = blocktalk.chain().get_tip().await?;
         log::info!("Current blockchain tip is at height {}", tip_height);
 
-        // Determine actual stop height (default to chain tip if not specified)
-        let actual_stop_height = stop_height.unwrap_or(tip_height);
-        // Cap at chain tip
-        let actual_stop_height = std::cmp::min(actual_stop_height, tip_height);
+        let stop_height = stop_height.unwrap_or(tip_height);
+        let actual_stop_height = std::cmp::min(stop_height, tip_height);
 
         let wallet = self.get_current_wallet()?;
         let mut wallet_guard = wallet.lock().unwrap();

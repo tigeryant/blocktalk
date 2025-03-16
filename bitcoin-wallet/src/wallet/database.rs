@@ -14,7 +14,6 @@ const INTERNAL_DESCRIPTOR: &str = "tr(tprv8ZgxMBicQKsPdJuLWWArdBsWjqDA3W5WoREnfd
 pub type ThreadSafeWallet = Mutex<PersistedWallet<rusqlite::Connection>>;
 
 pub struct WalletDatabase {
-    /// Path to the SQLite database file
     db_path: PathBuf,
 }
 
