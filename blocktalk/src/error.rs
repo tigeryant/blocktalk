@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ChainErrorKind {
     BlockNotFound,
     InvalidHeight,
@@ -11,7 +11,7 @@ pub enum ChainErrorKind {
     Other(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockValidationErrorKind {
     InvalidFormat,
     InvalidHash,
@@ -20,118 +20,66 @@ pub enum BlockValidationErrorKind {
     Other(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockTalkError {
-    Connection(capnp::Error),
-    Io(std::io::Error),
+    Connection(String),
+    Io(String),
     BlockValidation {
         kind: BlockValidationErrorKind,
-        source: Option<Box<dyn Error + Send + Sync>>,
+        message: String,
     },
     Node {
         message: String,
         code: i32,
-        source: Option<Box<dyn Error + Send + Sync>>,
     },
     Chain {
         kind: ChainErrorKind,
-        source: Option<Box<dyn Error + Send + Sync>>,
+        message: String,
     },
 }
 
 impl BlockTalkError {
-    pub fn node_error<T: Into<String>>(message: T, code: i32) -> Self {
-        Self::Node {
-            message: message.into(),
-            code,
-            source: None,
-        }
+    pub fn node_error(message: String, code: i32) -> Self {
+        BlockTalkError::Node { message, code }
     }
 
-    pub fn validation_error(kind: BlockValidationErrorKind) -> Self {
-        Self::BlockValidation { kind, source: None }
+    pub fn validation_error(kind: BlockValidationErrorKind, message: String) -> Self {
+        BlockTalkError::BlockValidation { kind, message }
     }
 
-    pub fn chain_error(kind: ChainErrorKind) -> Self {
-        Self::Chain { kind, source: None }
-    }
-
-    pub fn with_source(self, source: impl Error + Send + Sync + 'static) -> Self {
-        match self {
-            Self::Node { message, code, .. } => Self::Node {
-                message,
-                code,
-                source: Some(Box::new(source)),
-            },
-            Self::BlockValidation { kind, .. } => Self::BlockValidation {
-                kind,
-                source: Some(Box::new(source)),
-            },
-            Self::Chain { kind, .. } => Self::Chain {
-                kind,
-                source: Some(Box::new(source)),
-            },
-            _ => self,
-        }
+    pub fn chain_error(kind: ChainErrorKind, message: String) -> Self {
+        BlockTalkError::Chain { kind, message }
     }
 }
 
 impl fmt::Display for BlockTalkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Connection(e) => write!(f, "IPC connection error: {}", e),
-            Self::Io(e) => write!(f, "I/O error: {}", e),
-            Self::BlockValidation { kind, source } => {
-                write!(f, "Block validation error: {:?}", kind)?;
-                if let Some(src) = source {
-                    write!(f, " (Caused by: {})", src)?;
-                }
-                Ok(())
+            BlockTalkError::Connection(e) => write!(f, "Connection error: {}", e),
+            BlockTalkError::Io(e) => write!(f, "IO error: {}", e),
+            BlockTalkError::BlockValidation { kind, message } => {
+                write!(f, "Block validation error ({:?}): {}", kind, message)
             }
-            Self::Node {
-                message,
-                code,
-                source,
-            } => {
-                write!(f, "Node error (code {}): {}", code, message)?;
-                if let Some(src) = source {
-                    write!(f, " (Caused by: {})", src)?;
-                }
-                Ok(())
+            BlockTalkError::Node { message, code } => {
+                write!(f, "Node error ({}): {}", code, message)
             }
-            Self::Chain { kind, source } => {
-                write!(f, "Chain error: {:?}", kind)?;
-                if let Some(src) = source {
-                    write!(f, " (Caused by: {})", src)?;
-                }
-                Ok(())
+            BlockTalkError::Chain { kind, message } => {
+                write!(f, "Chain error ({:?}): {}", kind, message)
             }
         }
     }
 }
 
-impl Error for BlockTalkError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Connection(e) => Some(e),
-            Self::Io(e) => Some(e),
-            Self::BlockValidation { source, .. } => {
-                source.as_ref().map(|e| e.as_ref() as &dyn Error)
-            }
-            Self::Node { source, .. } => source.as_ref().map(|e| e.as_ref() as &dyn Error),
-            Self::Chain { source, .. } => source.as_ref().map(|e| e.as_ref() as &dyn Error),
-        }
-    }
-}
+impl Error for BlockTalkError {}
 
 impl From<capnp::Error> for BlockTalkError {
     fn from(error: capnp::Error) -> Self {
-        Self::Connection(error)
+        BlockTalkError::Connection(error.to_string())
     }
 }
 
 impl From<std::io::Error> for BlockTalkError {
     fn from(error: std::io::Error) -> Self {
-        Self::Io(error)
+        BlockTalkError::Io(error.to_string())
     }
 }

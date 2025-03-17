@@ -55,14 +55,14 @@ impl ChainInterface {
             .get_context()
             .map_err(|e| {
                 log::error!("Failed to get notification context: {}", e);
-                BlockTalkError::Connection(e)
+                BlockTalkError::Connection(e.to_string())
             })?
             .set_thread(self.thread.clone());
 
         handle_req.get().set_notifications(notification_client);
         handle_req.send().promise.await.map_err(|e| {
             log::error!("Failed to subscribe to notifications: {}", e);
-            BlockTalkError::Connection(e)
+            BlockTalkError::Connection(e.to_string())
         })?;
 
         log::info!("Successfully subscribed to chain notifications");
@@ -79,13 +79,13 @@ impl ChainInterface {
                 .get_context()
                 .map_err(|e| {
                     log::error!("Failed to get height context: {}", e);
-                    BlockTalkError::Connection(e)
+                    BlockTalkError::Connection(e.to_string())
                 })?
                 .set_thread(self.thread.clone());
 
             let response = height_req.send().promise.await.map_err(|e| {
                 log::error!("Failed to get chain height: {}", e);
-                BlockTalkError::chain_error(ChainErrorKind::InvalidHeight).with_source(e)
+                BlockTalkError::chain_error(ChainErrorKind::InvalidHeight, e.to_string())
             })?;
             response.get()?.get_result()
         };
@@ -97,14 +97,14 @@ impl ChainInterface {
                 .get_context()
                 .map_err(|e| {
                     log::error!("Failed to get block hash context: {}", e);
-                    BlockTalkError::Connection(e)
+                    BlockTalkError::Connection(e.to_string())
                 })?
                 .set_thread(self.thread.clone());
 
             hash_req.get().set_height(height);
             let response = hash_req.send().promise.await.map_err(|e| {
                 log::error!("Failed to get block hash at height {}: {}", height, e);
-                BlockTalkError::chain_error(ChainErrorKind::BlockNotFound).with_source(e)
+                BlockTalkError::chain_error(ChainErrorKind::BlockNotFound, e.to_string())
             })?;
             response.get()?.get_result()?.to_vec()
         };
@@ -135,7 +135,7 @@ impl ChainInterface {
             .get_context()
             .map_err(|e| {
                 log::error!("Failed to get block context at height {}: {}", height, e);
-                BlockTalkError::Connection(e)
+                BlockTalkError::Connection(e.to_string())
             })?
             .set_thread(self.thread.clone());
 
@@ -150,20 +150,20 @@ impl ChainInterface {
                     height,
                     e
                 );
-                BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor).with_source(e)
+                BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor, e.to_string())
             })?
             .set_want_data(true);
 
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to fetch block at height {}: {}", height, e);
-            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound, e.to_string())
         })?;
 
         let mut data = response.get()?.get_ancestor()?.get_data()?;
 
         Block::consensus_decode(&mut data).map_err(|e| {
             log::error!("Failed to decode block at height {}: {}", height, e);
-            BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed, e.to_string())
         })
     }
 
@@ -181,12 +181,12 @@ impl ChainInterface {
 
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to find block {}: {}", block_hash, e);
-            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound, e.to_string())
         })?;
 
         let block_info = response.get()?.get_block().map_err(|e| {
             log::error!("Failed to get block info for {}: {}", block_hash, e);
-            BlockTalkError::chain_error(ChainErrorKind::InvalidBlockData).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::InvalidBlockData, e.to_string())
         })?;
 
         let is_active = block_info.get_in_active_chain() != 0;
@@ -223,7 +223,7 @@ impl ChainInterface {
             .get_context()
             .map_err(|e| {
                 log::error!("Failed to get ancestor context: {}", e);
-                BlockTalkError::Connection(e)
+                BlockTalkError::Connection(e.to_string())
             })?
             .set_thread(self.thread.clone());
 
@@ -235,7 +235,7 @@ impl ChainInterface {
 
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to find common ancestor: {}", e);
-            BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor, e.to_string())
         })?;
 
         let ancestor_bytes = response.get()?.get_ancestor()?.get_data()?;
@@ -263,14 +263,14 @@ impl ChainInterface {
             .get_context()
             .map_err(|e| {
                 log::error!("Failed to get block context for hash {}: {}", block_hash, e);
-                BlockTalkError::Connection(e)
+                BlockTalkError::Connection(e.to_string())
             })?
             .set_thread(self.thread.clone());
 
         find_req.get().set_hash(&hash_bytes);
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to fetch block with hash {}: {}", block_hash, e);
-            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound).with_source(e)
+            BlockTalkError::chain_error(ChainErrorKind::BlockNotFound, e.to_string())
         })?;
 
         let block_info = response.get()?.get_block()?;
@@ -286,10 +286,10 @@ impl ChainInterface {
             }
             Err(e) => {
                 log::error!("Failed to deserialize block {}: {}", block_hash, e);
-                Err(
-                    BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed)
-                        .with_source(e),
-                )
+                Err(BlockTalkError::chain_error(
+                    ChainErrorKind::DeserializationFailed,
+                    e.to_string(),
+                ))
             }
         }
     }
@@ -300,6 +300,7 @@ impl ChainInterface {
             log::error!("Invalid hash length: expected 32, got {}", bytes.len());
             return Err(BlockTalkError::chain_error(
                 ChainErrorKind::InvalidBlockData,
+                format!("Invalid hash length: expected 32, got {}", bytes.len()),
             ));
         }
 
