@@ -62,26 +62,32 @@ mkdir -p datadir_blocktalk
 
 ### Usage
 
+> ⚠️ **Note**: Currently, all BlockTalk code must run inside a `tokio::task::LocalSet`. This is a temporary requirement that will be removed in a future version.
+
 #### Chain queries
 
 ```rust
-let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
-let chain = blocktalk.chain();
+let local = tokio::task::LocalSet::new();
+local.run_until(async {
+    let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
+    let chain = blocktalk.chain();
 
-// Get current tip
-let (height, hash) = chain.get_tip().await?;
-println!("Current tip: height={}, hash={}", height, hash);
+    // Get current tip
+    let (height, hash) = chain.get_tip().await?;
+    println!("Current tip: height={}, hash={}", height, hash);
 
-// Get block at specific height
-let block = chain.get_block(&hash, height - 1).await?;
-println!("Previous block hash: {}", block.block_hash());
+    // Get block at specific height
+    let block = chain.get_block(&hash, height - 1).await?;
+    println!("Previous block hash: {}", block.block_hash());
+}).await
 ```
 
 #### Chain Monitoring
 
 ```rust
-use blocktalk::{BlockTalk, NotificationHandler, ChainNotification};
+use blocktalk::{BlockTalk, NotificationHandler, ChainNotification, BlockTalkError};
 use async_trait::async_trait;
+use std::sync::Arc;
 
 struct BlockMonitor;
 
@@ -103,15 +109,19 @@ impl NotificationHandler for BlockMonitor {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
+    let local = tokio::task::LocalSet::new();
     
-    // Register handler and subscribe
-    blocktalk.chain().register_handler(Arc::new(BlockMonitor)).await;
-    blocktalk.chain().subscribe_to_notifications().await?;
+    local.run_until(async {
+        let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
+        
+        // Register handler and subscribe
+        blocktalk.chain().register_handler(Arc::new(BlockMonitor)).await?;
+        blocktalk.chain().subscribe_to_notifications().await?;
 
-    // Keep running until Ctrl+C
-    tokio::signal::ctrl_c().await?;
-    Ok(())
+        // Keep running until Ctrl+C
+        tokio::signal::ctrl_c().await?;
+        Ok(())
+    }).await
 }
 ```
 
