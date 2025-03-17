@@ -36,9 +36,7 @@ impl BlockTalk {
     pub async fn disconnect(self) -> Result<(), BlockTalkError> {
         match Arc::try_unwrap(self.connection) {
             Ok(conn) => conn.disconnect().await,
-            Err(_) => {
-                Ok(())
-            }
+            Err(_) => Ok(()),
         }
     }
 }

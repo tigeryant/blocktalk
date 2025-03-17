@@ -49,17 +49,11 @@ impl BlockTalkError {
     }
 
     pub fn validation_error(kind: BlockValidationErrorKind) -> Self {
-        Self::BlockValidation {
-            kind,
-            source: None,
-        }
+        Self::BlockValidation { kind, source: None }
     }
 
     pub fn chain_error(kind: ChainErrorKind) -> Self {
-        Self::Chain {
-            kind,
-            source: None,
-        }
+        Self::Chain { kind, source: None }
     }
 
     pub fn with_source(self, source: impl Error + Send + Sync + 'static) -> Self {
@@ -94,7 +88,11 @@ impl fmt::Display for BlockTalkError {
                 }
                 Ok(())
             }
-            Self::Node { message, code, source } => {
+            Self::Node {
+                message,
+                code,
+                source,
+            } => {
                 write!(f, "Node error (code {}): {}", code, message)?;
                 if let Some(src) = source {
                     write!(f, " (Caused by: {})", src)?;
@@ -117,7 +115,9 @@ impl Error for BlockTalkError {
         match self {
             Self::Connection(e) => Some(e),
             Self::Io(e) => Some(e),
-            Self::BlockValidation { source, .. } => source.as_ref().map(|e| e.as_ref() as &dyn Error),
+            Self::BlockValidation { source, .. } => {
+                source.as_ref().map(|e| e.as_ref() as &dyn Error)
+            }
             Self::Node { source, .. } => source.as_ref().map(|e| e.as_ref() as &dyn Error),
             Self::Chain { source, .. } => source.as_ref().map(|e| e.as_ref() as &dyn Error),
         }

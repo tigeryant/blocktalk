@@ -19,10 +19,12 @@ impl Connection {
     pub async fn connect(socket_path: &str) -> Result<Arc<Self>, BlockTalkError> {
         log::info!("Connecting to Bitcoin node at {}", socket_path);
 
-        let stream = tokio::net::UnixStream::connect(socket_path).await.map_err(|e| {
-            log::error!("Failed to connect to Unix socket at {}: {}", socket_path, e);
-            BlockTalkError::Io(e)
-        })?;
+        let stream = tokio::net::UnixStream::connect(socket_path)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to connect to Unix socket at {}: {}", socket_path, e);
+                BlockTalkError::Io(e)
+            })?;
         log::debug!("Unix stream connected successfully");
         let (reader, writer) = stream.into_split();
 
@@ -93,13 +95,11 @@ impl Connection {
 
     pub async fn disconnect(self) -> Result<(), BlockTalkError> {
         log::info!("Disconnecting from node");
-        self.disconnector
-            .await
-            .map_err(|e| {
-                log::error!("Failed to disconnect RPC: {}", e);
-                BlockTalkError::Connection(e)
-            })?;
-        
+        self.disconnector.await.map_err(|e| {
+            log::error!("Failed to disconnect RPC: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
+
         match self.rpc_handle.await {
             Ok(result) => {
                 result.map_err(|e| {

@@ -4,13 +4,13 @@ use bitcoin::{Block, BlockHash};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::error::ChainErrorKind;
 use crate::{
     chain_capnp::chain::Client as ChainClient,
     notification::{ChainNotificationHandler, NotificationHandler},
     proxy_capnp::thread::Client as ThreadClient,
     BlockTalkError, Connection,
 };
-use crate::error::{BlockValidationErrorKind, ChainErrorKind};
 
 pub struct ChainInterface {
     chain_client: ChainClient,
@@ -50,10 +50,14 @@ impl ChainInterface {
         let notification_client = capnp_rpc::new_client(handler);
         let mut handle_req = self.chain_client.handle_notifications_request();
 
-        handle_req.get().get_context().map_err(|e| {
-            log::error!("Failed to get notification context: {}", e);
-            BlockTalkError::Connection(e)
-        })?.set_thread(self.thread.clone());
+        handle_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get notification context: {}", e);
+                BlockTalkError::Connection(e)
+            })?
+            .set_thread(self.thread.clone());
 
         handle_req.get().set_notifications(notification_client);
         handle_req.send().promise.await.map_err(|e| {
@@ -70,10 +74,14 @@ impl ChainInterface {
         log::debug!("Fetching current chain tip");
         let height = {
             let mut height_req = self.chain_client.get_height_request();
-            height_req.get().get_context().map_err(|e| {
-                log::error!("Failed to get height context: {}", e);
-                BlockTalkError::Connection(e)
-            })?.set_thread(self.thread.clone());
+            height_req
+                .get()
+                .get_context()
+                .map_err(|e| {
+                    log::error!("Failed to get height context: {}", e);
+                    BlockTalkError::Connection(e)
+                })?
+                .set_thread(self.thread.clone());
 
             let response = height_req.send().promise.await.map_err(|e| {
                 log::error!("Failed to get chain height: {}", e);
@@ -84,10 +92,14 @@ impl ChainInterface {
 
         let hash_bytes = {
             let mut hash_req = self.chain_client.get_block_hash_request();
-            hash_req.get().get_context().map_err(|e| {
-                log::error!("Failed to get block hash context: {}", e);
-                BlockTalkError::Connection(e)
-            })?.set_thread(self.thread.clone());
+            hash_req
+                .get()
+                .get_context()
+                .map_err(|e| {
+                    log::error!("Failed to get block hash context: {}", e);
+                    BlockTalkError::Connection(e)
+                })?
+                .set_thread(self.thread.clone());
 
             hash_req.get().set_height(height);
             let response = hash_req.send().promise.await.map_err(|e| {
@@ -102,7 +114,11 @@ impl ChainInterface {
             e
         })?;
 
-        log::debug!("Retrieved chain tip at height {} with hash {}", height, hash);
+        log::debug!(
+            "Retrieved chain tip at height {} with hash {}",
+            height,
+            hash
+        );
         Ok((height, hash))
     }
 
@@ -113,19 +129,30 @@ impl ChainInterface {
     ) -> Result<Block, BlockTalkError> {
         log::debug!("Getting block at height {}", height);
         let mut find_req = self.chain_client.find_ancestor_by_height_request();
-        
-        find_req.get().get_context().map_err(|e| {
-            log::error!("Failed to get block context at height {}: {}", height, e);
-            BlockTalkError::Connection(e)
-        })?.set_thread(self.thread.clone());
+
+        find_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get block context at height {}: {}", height, e);
+                BlockTalkError::Connection(e)
+            })?
+            .set_thread(self.thread.clone());
 
         let mut params = find_req.get();
         params.set_block_hash(node_tip_hash.as_ref());
         params.set_ancestor_height(height);
-        params.get_ancestor().map_err(|e| {
-            log::error!("Failed to set ancestor parameters at height {}: {}", height, e);
-            BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor).with_source(e)
-        })?.set_want_data(true);
+        params
+            .get_ancestor()
+            .map_err(|e| {
+                log::error!(
+                    "Failed to set ancestor parameters at height {}: {}",
+                    height,
+                    e
+                );
+                BlockTalkError::chain_error(ChainErrorKind::InvalidAncestor).with_source(e)
+            })?
+            .set_want_data(true);
 
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to fetch block at height {}: {}", height, e);
@@ -146,9 +173,12 @@ impl ChainInterface {
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
 
         let mut find_req = self.chain_client.find_block_request();
-        find_req.get().get_context()?.set_thread(self.thread.clone());
+        find_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread.clone());
         find_req.get().set_hash(&hash_bytes);
-        
+
         let response = find_req.send().promise.await.map_err(|e| {
             log::error!("Failed to find block {}: {}", block_hash, e);
             BlockTalkError::chain_error(ChainErrorKind::BlockNotFound).with_source(e)
@@ -164,7 +194,11 @@ impl ChainInterface {
         log::debug!(
             "Block {} is {} in the active chain",
             block_hash,
-            if is_active { "included" } else { "not included" }
+            if is_active {
+                "included"
+            } else {
+                "not included"
+            }
         );
         Ok(is_active)
     }
@@ -184,10 +218,14 @@ impl ChainInterface {
         let hash2_bytes = block2_hash.to_raw_hash().to_byte_array();
 
         let mut find_req = self.chain_client.find_common_ancestor_request();
-        find_req.get().get_context().map_err(|e| {
-            log::error!("Failed to get ancestor context: {}", e);
-            BlockTalkError::Connection(e)
-        })?.set_thread(self.thread.clone());
+        find_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get ancestor context: {}", e);
+                BlockTalkError::Connection(e)
+            })?
+            .set_thread(self.thread.clone());
 
         {
             let mut params = find_req.get();
@@ -220,10 +258,14 @@ impl ChainInterface {
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
 
         let mut find_req = self.chain_client.find_block_request();
-        find_req.get().get_context().map_err(|e| {
-            log::error!("Failed to get block context for hash {}: {}", block_hash, e);
-            BlockTalkError::Connection(e)
-        })?.set_thread(self.thread.clone());
+        find_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get block context for hash {}: {}", block_hash, e);
+                BlockTalkError::Connection(e)
+            })?
+            .set_thread(self.thread.clone());
 
         find_req.get().set_hash(&hash_bytes);
         let response = find_req.send().promise.await.map_err(|e| {
@@ -244,7 +286,10 @@ impl ChainInterface {
             }
             Err(e) => {
                 log::error!("Failed to deserialize block {}: {}", block_hash, e);
-                Err(BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed).with_source(e))
+                Err(
+                    BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed)
+                        .with_source(e),
+                )
             }
         }
     }
@@ -253,11 +298,15 @@ impl ChainInterface {
     fn bytes_to_block_hash(&self, bytes: &[u8]) -> Result<BlockHash, BlockTalkError> {
         if bytes.len() != 32 {
             log::error!("Invalid hash length: expected 32, got {}", bytes.len());
-            return Err(BlockTalkError::chain_error(ChainErrorKind::InvalidBlockData));
+            return Err(BlockTalkError::chain_error(
+                ChainErrorKind::InvalidBlockData,
+            ));
         }
 
         let mut hash_bytes = [0u8; 32];
         hash_bytes.copy_from_slice(bytes);
-        Ok(BlockHash::from_raw_hash(bitcoin::hashes::Hash::from_byte_array(hash_bytes)))
+        Ok(BlockHash::from_raw_hash(
+            bitcoin::hashes::Hash::from_byte_array(hash_bytes),
+        ))
     }
 }
