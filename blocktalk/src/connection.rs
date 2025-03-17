@@ -8,7 +8,6 @@ use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 use crate::BlockTalkError;
 
-/// Represents a connection to the Bitcoin node
 pub struct Connection {
     rpc_handle: JoinHandle<Result<(), capnp::Error>>,
     disconnector: capnp_rpc::Disconnector<twoparty::VatId>,
@@ -17,11 +16,13 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Create a new connection to the Bitcoin node
     pub async fn connect(socket_path: &str) -> Result<Arc<Self>, BlockTalkError> {
         log::info!("Connecting to Bitcoin node at {}", socket_path);
 
-        let stream = tokio::net::UnixStream::connect(socket_path).await?;
+        let stream = tokio::net::UnixStream::connect(socket_path).await.map_err(|e| {
+            log::error!("Failed to connect to Unix socket at {}: {}", socket_path, e);
+            BlockTalkError::Io(e)
+        })?;
         log::debug!("Unix stream connected successfully");
         let (reader, writer) = stream.into_split();
 
@@ -39,27 +40,46 @@ impl Connection {
         log::debug!("Spawning RPC task");
         let rpc_handle = tokio::task::spawn_local(rpc);
 
-        // Get thread client
         let mk_init_req = init_interface.construct_request();
-        let response = mk_init_req.send().promise.await?;
+        let response = mk_init_req.send().promise.await.map_err(|e| {
+            log::error!("Failed to initialize connection: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
 
-        let thread_map = response.get()?.get_thread_map()?;
+        let thread_map = response.get()?.get_thread_map().map_err(|e| {
+            log::error!("Failed to get thread map: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
 
         let mk_thread_req = thread_map.make_thread_request();
-        let response = mk_thread_req.send().promise.await?;
+        let response = mk_thread_req.send().promise.await.map_err(|e| {
+            log::error!("Failed to create thread: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
 
-        let thread = response.get()?.get_result()?;
+        let thread = response.get()?.get_result().map_err(|e| {
+            log::error!("Failed to get thread result: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
         log::debug!("Thread client established");
 
-        // Set up chain client with thread context
         let mut mk_chain_req = init_interface.make_chain_request();
         {
-            let mut context = mk_chain_req.get().get_context()?;
+            let mut context = mk_chain_req.get().get_context().map_err(|e| {
+                log::error!("Failed to get chain context: {}", e);
+                BlockTalkError::Connection(e)
+            })?;
             context.set_thread(thread.clone());
         }
-        let response = mk_chain_req.send().promise.await?;
+        let response = mk_chain_req.send().promise.await.map_err(|e| {
+            log::error!("Failed to initialize chain client: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
 
-        let chain_client = response.get()?.get_result()?;
+        let chain_client = response.get()?.get_result().map_err(|e| {
+            log::error!("Failed to get chain client result: {}", e);
+            BlockTalkError::Connection(e)
+        })?;
         log::debug!("Chain client established");
 
         log::info!("Connection to node established successfully");
@@ -71,26 +91,36 @@ impl Connection {
         }))
     }
 
-    /// Disconnect from the node
     pub async fn disconnect(self) -> Result<(), BlockTalkError> {
         log::info!("Disconnecting from node");
         self.disconnector
             .await
-            .map_err(BlockTalkError::ConnectionError)?;
-        self.rpc_handle
-            .await
-            .map_err(|e| BlockTalkError::NodeError(e.to_string()))?
-            .map_err(BlockTalkError::ConnectionError)?;
+            .map_err(|e| {
+                log::error!("Failed to disconnect RPC: {}", e);
+                BlockTalkError::Connection(e)
+            })?;
+        
+        match self.rpc_handle.await {
+            Ok(result) => {
+                result.map_err(|e| {
+                    log::error!("RPC handle error during disconnect: {}", e);
+                    BlockTalkError::Connection(e)
+                })?;
+            }
+            Err(e) => {
+                log::error!("Task join error during disconnect: {}", e);
+                return Err(BlockTalkError::node_error(e.to_string(), -1));
+            }
+        }
+
         log::info!("Disconnection completed successfully");
         Ok(())
     }
 
-    /// Get a reference to the chain client
     pub fn chain_client(&self) -> &ChainClient {
         &self.chain_client
     }
 
-    /// Get a reference to the thread client
     pub fn thread(&self) -> &ThreadClient {
         &self.thread
     }
