@@ -35,9 +35,11 @@ impl ChainInterface {
         }
     }
 
-    pub async fn register_handler(&self, handler: Arc<dyn NotificationHandler>) {
-        let mut notification_handler = self.notification_handler.lock().unwrap();
-        notification_handler.register_handler(handler).await;
+    pub async fn register_handler(&self, handler: Arc<dyn NotificationHandler>) -> Result<(), BlockTalkError> {
+        let mut notification_handler = self.notification_handler.lock().map_err(|e| {
+            BlockTalkError::Connection(format!("Failed to acquire lock for notification handler: {}", e))
+        })?;
+        notification_handler.register_handler(handler).await
     }
 
     pub fn notification_handler(&self) -> Arc<Mutex<ChainNotificationHandler>> {
