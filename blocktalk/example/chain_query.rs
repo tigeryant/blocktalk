@@ -1,5 +1,5 @@
 use bitcoin::BlockHash;
-use blocktalk::{BlockTalk, BlockTalkError};
+use blocktalk::{BlockTalk, BlockTalkError, ChainInterface};
 use std::path::Path;
 use std::time::Duration;
 use tokio::task::LocalSet;
@@ -23,13 +23,13 @@ async fn main() -> Result<(), BlockTalkError> {
             let chain = blocktalk.chain();
 
             // Execute chain queries
-            let tip_info = query_chain_tip(chain).await;
+            let tip_info = query_chain_tip(chain.as_ref()).await;
             
             // If we got the tip info, try to get a block from a few blocks back
             if let Some((height, tip_hash)) = tip_info {
                 if height > 3 {
                     // Try to get block from 1 block before tip
-                    get_block_at_height(chain, &tip_hash, height).await;
+                    get_block_at_height(chain.as_ref(), &tip_hash, height).await;
                 }
             }
 
@@ -72,7 +72,7 @@ async fn connect_to_node(socket_path: &str) -> Option<BlockTalk> {
 }
 
 /// Queries and displays the current chain tip
-async fn query_chain_tip(chain: &blocktalk::ChainInterface) -> Option<(i32, BlockHash)> {
+async fn query_chain_tip(chain: &dyn ChainInterface) -> Option<(i32, BlockHash)> {
     println!("\n╔════════════════════════════════════════════════════════════════════════════╗");
     println!("║                              Current Chain Tip                             ║");
     println!("╠════════════════════════════════════════════════════════════════════════════╣");
@@ -99,7 +99,7 @@ async fn query_chain_tip(chain: &blocktalk::ChainInterface) -> Option<(i32, Bloc
 }
 
 /// Gets and displays block at specific height using the get_block method
-async fn get_block_at_height(chain: &blocktalk::ChainInterface, tip_hash: &BlockHash, height: i32) {
+async fn get_block_at_height(chain: &dyn ChainInterface, tip_hash: &BlockHash, height: i32) {
     println!("\n╔═════════════════════════════════════════════════════════════════════════════════╗");
     println!("║                                   Block Details                                 ║");
     println!("╠═════════════════════════════════════════════════════════════════════════════════╣");
@@ -118,23 +118,26 @@ async fn get_block_at_height(chain: &blocktalk::ChainInterface, tip_hash: &Block
                 println!("╟──────────────┴──────────────────────────────────────────────────────────────────╢");
                 println!("║                                 Transactions                                    ║");
                 println!("╠═════════════════════════════════════════════════════════════════════════════════╣");
-                
+
                 let count = std::cmp::min(3, block.txdata.len());
                 for (i, tx) in block.txdata.iter().take(count).enumerate() {
                     println!("║ TX #{:<3}                                                                         ║", i + 1);
                     println!("║ ├─ TXID      │ {:<64} ║", tx.compute_txid());
                     println!("║ ├─ Inputs    │ {:<64} ║", tx.input.len());
                     println!("║ ├─ Outputs   │ {:<64} ║", tx.output.len());
-                    
+
                     if !tx.output.is_empty() {
                         let sample_output = &tx.output[0];
-                        println!("║ └─ Sample Out│ {:<64} ║", format!("{} satoshis", sample_output.value));
+                        println!(
+                            "║ └─ Sample Out│ {:<64} ║",
+                            format!("{} satoshis", sample_output.value)
+                        );
                     }
-                    
+
                     if tx.is_coinbase() {
                         println!("║     [Coinbase Transaction]                                                      ║");
                     }
-                    
+
                     if i < count - 1 {
                         println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
                     }

@@ -40,9 +40,15 @@ impl ChainNotificationHandler {
         }
     }
 
-    pub async fn register_handler(&mut self, handler: Arc<dyn NotificationHandler>) -> Result<(), BlockTalkError> {
+    pub async fn register_handler(
+        &mut self,
+        handler: Arc<dyn NotificationHandler>,
+    ) -> Result<(), BlockTalkError> {
         let mut guard = self.handlers.lock().map_err(|e| {
-            BlockTalkError::Connection(format!("Failed to acquire lock for registering handler: {}", e))
+            BlockTalkError::Connection(format!(
+                "Failed to acquire lock for registering handler: {}",
+                e
+            ))
         })?;
         guard.push(handler);
         Ok(())
@@ -54,7 +60,10 @@ impl ChainNotificationHandler {
     ) -> Result<(), BlockTalkError> {
         let handlers = {
             let guard = self.handlers.lock().map_err(|e| {
-                BlockTalkError::Connection(format!("Failed to acquire lock for dispatching notification: {}", e))
+                BlockTalkError::Connection(format!(
+                    "Failed to acquire lock for dispatching notification: {}",
+                    e
+                ))
             })?;
             guard.clone()
         };

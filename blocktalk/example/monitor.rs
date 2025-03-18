@@ -99,12 +99,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Register handler with chain interface
             let monitor_arc = Arc::new(monitor);
-            blocktalk.chain().register_handler(monitor_arc).await.map_err(|e| {
-                log::error!("Failed to register notification handler: {}", e);
-                e
-            })?;
+            blocktalk
+                .chain()
+                .add_notification_handler(monitor_arc)
+                .await
+                .map_err(|e| {
+                    log::error!("Failed to register notification handler: {}", e);
+                    e
+                })?;
             // Start subscribing to notifications
-            blocktalk.chain().subscribe_to_notifications().await?;
+            blocktalk.chain().begin_chain_updates().await?;
 
             println!("🔍 Monitoring blockchain events. Press Ctrl+C to exit.");
 

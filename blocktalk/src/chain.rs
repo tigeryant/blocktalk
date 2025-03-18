@@ -12,67 +12,64 @@ use crate::{
     BlockTalkError, Connection,
 };
 
-pub struct ChainInterface {
+#[async_trait::async_trait(?Send)]
+pub trait ChainInterface {
+    /// Get the current tip block's height and hash
+    async fn get_tip(&self) -> Result<(i32, BlockHash), BlockTalkError>;
+
+    /// Get a block at a specific height
+    async fn get_block(
+        &self,
+        node_tip_hash: &bitcoin::BlockHash,
+        height: i32,
+    ) -> Result<Block, BlockTalkError>;
+
+    /// Check if a block is in the best chain
+    async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError>;
+
+    /// Find the common ancestor between two blocks
+    async fn find_common_ancestor(
+        &self,
+        block1_hash: &BlockHash,
+        block2_hash: &BlockHash,
+    ) -> Result<Option<BlockHash>, BlockTalkError>;
+
+    /// Get a full block by its hash
+    async fn get_block_by_hash(
+        &self,
+        block_hash: &BlockHash,
+    ) -> Result<Option<Block>, BlockTalkError>;
+
+    /// Add a notification handler to receive chain updates
+    async fn add_notification_handler(
+        &self,
+        handler: Arc<dyn NotificationHandler>,
+    ) -> Result<(), BlockTalkError>;
+
+    /// Remove a previously added notification handler
+    async fn remove_notification_handler(
+        &self,
+        handler: Arc<dyn NotificationHandler>,
+    ) -> Result<(), BlockTalkError>;
+
+    /// Start receiving chain updates
+    /// This must be called after adding handlers for them to receive updates
+    async fn begin_chain_updates(&self) -> Result<(), BlockTalkError>;
+
+    /// Stop receiving chain updates
+    /// Handlers will stop receiving updates but remain registered
+    async fn stop_chain_updates(&self) -> Result<(), BlockTalkError>;
+}
+
+pub struct Blockchain {
     chain_client: ChainClient,
     thread: ThreadClient,
     notification_handler: Arc<Mutex<ChainNotificationHandler>>,
 }
 
-impl ChainInterface {
-    pub fn new(connection: Arc<Connection>) -> Self {
-        Self {
-            chain_client: connection.chain_client().clone(),
-            thread: connection.thread().clone(),
-            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
-        }
-    }
-
-    pub fn from_client(chain_client: ChainClient, thread: ThreadClient) -> Self {
-        Self {
-            chain_client,
-            thread,
-            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
-        }
-    }
-
-    pub async fn register_handler(&self, handler: Arc<dyn NotificationHandler>) -> Result<(), BlockTalkError> {
-        let mut notification_handler = self.notification_handler.lock().map_err(|e| {
-            BlockTalkError::Connection(format!("Failed to acquire lock for notification handler: {}", e))
-        })?;
-        notification_handler.register_handler(handler).await
-    }
-
-    pub fn notification_handler(&self) -> Arc<Mutex<ChainNotificationHandler>> {
-        self.notification_handler.clone()
-    }
-
-    pub async fn subscribe_to_notifications(&self) -> Result<(), BlockTalkError> {
-        log::debug!("Subscribing to chain notifications");
-        let handler = self.notification_handler.lock().unwrap().clone();
-        let notification_client = capnp_rpc::new_client(handler);
-        let mut handle_req = self.chain_client.handle_notifications_request();
-
-        handle_req
-            .get()
-            .get_context()
-            .map_err(|e| {
-                log::error!("Failed to get notification context: {}", e);
-                BlockTalkError::Connection(e.to_string())
-            })?
-            .set_thread(self.thread.clone());
-
-        handle_req.get().set_notifications(notification_client);
-        handle_req.send().promise.await.map_err(|e| {
-            log::error!("Failed to subscribe to notifications: {}", e);
-            BlockTalkError::Connection(e.to_string())
-        })?;
-
-        log::info!("Successfully subscribed to chain notifications");
-        Ok(())
-    }
-
-    /// Get the current tip block's height and hash
-    pub async fn get_tip(&self) -> Result<(i32, BlockHash), BlockTalkError> {
+#[async_trait::async_trait(?Send)]
+impl ChainInterface for Blockchain {
+    async fn get_tip(&self) -> Result<(i32, BlockHash), BlockTalkError> {
         log::debug!("Fetching current chain tip");
         let height = {
             let mut height_req = self.chain_client.get_height_request();
@@ -124,7 +121,7 @@ impl ChainInterface {
         Ok((height, hash))
     }
 
-    pub async fn get_block(
+    async fn get_block(
         &self,
         node_tip_hash: &bitcoin::BlockHash,
         height: i32,
@@ -169,8 +166,7 @@ impl ChainInterface {
         })
     }
 
-    /// Check if a block is in the best chain
-    pub async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError> {
+    async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError> {
         log::debug!("Checking if block {} is in best chain", block_hash);
         let hash_bytes = block_hash.to_raw_hash().to_byte_array();
 
@@ -205,8 +201,7 @@ impl ChainInterface {
         Ok(is_active)
     }
 
-    /// Find the common ancestor between two blocks
-    pub async fn find_common_ancestor(
+    async fn find_common_ancestor(
         &self,
         block1_hash: &BlockHash,
         block2_hash: &BlockHash,
@@ -251,8 +246,7 @@ impl ChainInterface {
         }
     }
 
-    /// Get a full block by its hash
-    pub async fn get_block_by_hash(
+    async fn get_block_by_hash(
         &self,
         block_hash: &BlockHash,
     ) -> Result<Option<Block>, BlockTalkError> {
@@ -294,6 +288,85 @@ impl ChainInterface {
                 ))
             }
         }
+    }
+
+    async fn add_notification_handler(
+        &self,
+        handler: Arc<dyn NotificationHandler>,
+    ) -> Result<(), BlockTalkError> {
+        let mut notification_handler = self.notification_handler.lock().map_err(|e| {
+            BlockTalkError::Connection(format!(
+                "Failed to acquire lock for notification handler: {}",
+                e
+            ))
+        })?;
+        notification_handler.register_handler(handler).await
+    }
+
+    async fn remove_notification_handler(
+        &self,
+        handler: Arc<dyn NotificationHandler>,
+    ) -> Result<(), BlockTalkError> {
+        let mut notification_handler = self.notification_handler.lock().map_err(|e| {
+            BlockTalkError::Connection(format!(
+                "Failed to acquire lock for notification handler: {}",
+                e
+            ))
+        })?;
+        // TODO: Implement handler removal in ChainNotificationHandler if possible
+        Ok(())
+    }
+
+    async fn begin_chain_updates(&self) -> Result<(), BlockTalkError> {
+        log::debug!("Starting chain update notifications");
+        let handler = self.notification_handler.lock().unwrap().clone();
+        let notification_client = capnp_rpc::new_client(handler);
+        let mut handle_req = self.chain_client.handle_notifications_request();
+
+        handle_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get notification context: {}", e);
+                BlockTalkError::Connection(e.to_string())
+            })?
+            .set_thread(self.thread.clone());
+
+        handle_req.get().set_notifications(notification_client);
+        handle_req.send().promise.await.map_err(|e| {
+            log::error!("Failed to start chain updates: {}", e);
+            BlockTalkError::Connection(e.to_string())
+        })?;
+
+        log::info!("Successfully started chain updates");
+        Ok(())
+    }
+
+    async fn stop_chain_updates(&self) -> Result<(), BlockTalkError> {
+        // TODO: Implement stopping notifications in the Cap'n Proto RPC layer
+        Ok(())
+    }
+}
+
+impl Blockchain {
+    pub fn new(connection: Arc<Connection>) -> Self {
+        Self {
+            chain_client: connection.chain_client().clone(),
+            thread: connection.thread().clone(),
+            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
+        }
+    }
+
+    pub fn from_client(chain_client: ChainClient, thread: ThreadClient) -> Self {
+        Self {
+            chain_client,
+            thread,
+            notification_handler: Arc::new(Mutex::new(ChainNotificationHandler::new())),
+        }
+    }
+
+    pub fn notification_handler(&self) -> Arc<Mutex<ChainNotificationHandler>> {
+        self.notification_handler.clone()
     }
 
     // Helper method to convert bytes to BlockHash
