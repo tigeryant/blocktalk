@@ -1,5 +1,4 @@
-use bitcoin::BlockHash;
-use blocktalk::{BlockTalk, BlockTalkError, ChainInterface};
+use blocktalk::{BlockTalk, BlockTalkError, ChainInterface, BlockHash};
 use std::path::Path;
 use std::time::Duration;
 use tokio::task::LocalSet;
