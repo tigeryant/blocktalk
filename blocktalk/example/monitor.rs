@@ -3,6 +3,9 @@ use async_trait::async_trait;
 use blocktalk::{BlockTalk, BlockTalkError, ChainNotification, NotificationHandler};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::path::Path;
+use std::time::Duration;
+use tokio::task::LocalSet;
 
 struct BlockMonitor {
     latest_height: Arc<Mutex<i32>>,
@@ -78,44 +81,79 @@ impl NotificationHandler for BlockMonitor {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let local = tokio::task::LocalSet::new();
+/// Checks if the socket path exists and prints helpful error if not
+fn check_socket_path(socket_path: &str) -> bool {
+    if Path::new(socket_path).exists() {
+        return true;
+    }
 
-    local
-        .run_until(async move {
-            println!("⏳ Connecting to Bitcoin node...");
-            let blocktalk =
-                BlockTalk::init("../bitcoin/datadir_blocktalk/regtest/node.sock").await?;
+    println!("Error: Socket file {} does not exist!", socket_path);
+    println!("Please check that:");
+    println!("1. Bitcoin node is running");
+    println!("2. Bitcoin node is configured to use this Unix socket path");
+    println!("3. You have the correct permissions to access the socket");
+    false
+}
+
+/// Attempts to connect to the Bitcoin node with timeout
+async fn connect_to_node(socket_path: &str) -> Option<BlockTalk> {
+    println!("⏳ Connecting to Bitcoin node...");
+    match tokio::time::timeout(Duration::from_secs(5), BlockTalk::init(socket_path)).await {
+        Ok(Ok(bt)) => {
             println!("✅ Connected successfully!");
+            Some(bt)
+        }
+        Ok(Err(e)) => {
+            println!("⛔️ Error connecting to Bitcoin node: {}", e);
+            None
+        }
+        Err(_) => {
+            println!("⏲️ Connection timed out after 5 seconds");
+            None
+        }
+    }
+}
 
-            // Get current tip info
-            let (height, _) = blocktalk.chain().get_tip().await?;
+#[tokio::main]
+async fn main() -> Result<(), BlockTalkError> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        println!("Usage: monitor <socket_path>");
+        return Ok(());
+    }
 
-            // Create monitor
-            let monitor = BlockMonitor {
-                latest_height: Arc::new(Mutex::new(height)),
+    let socket_path = &args[1];
+
+    if !check_socket_path(socket_path) {
+        return Ok(());
+    }
+
+    let local = LocalSet::new();
+    local
+        .run_until(async {
+            let blocktalk = match connect_to_node(socket_path).await {
+                Some(bt) => bt,
+                None => return Ok(()),
             };
 
-            // Register handler with chain interface
-            let monitor_arc = Arc::new(monitor);
-            blocktalk
-                .chain()
-                .add_notification_handler(monitor_arc)
-                .await
-                .map_err(|e| {
-                    log::error!("Failed to register notification handler: {}", e);
-                    e
-                })?;
-            // Start subscribing to notifications
-            blocktalk.chain().begin_chain_updates().await?;
+            let chain = blocktalk.chain();
 
-            println!("🔍 Monitoring blockchain events. Press Ctrl+C to exit.");
+            // Create and register notification handler
+            let handler = Arc::new(BlockMonitor {
+                latest_height: Arc::new(Mutex::new(0)),
+            });
+            chain.add_notification_handler(handler.clone()).await?;
 
-            // Keep the program running until Ctrl+C
+            // Start receiving chain updates
+            chain.begin_chain_updates().await?;
+
+            println!("Monitoring chain updates. Press Ctrl+C to stop.");
+            
+            // Keep the program running
             tokio::signal::ctrl_c().await?;
-            println!("Shutting down monitor...");
-
+            println!("\nStopping chain updates...");
+            
+            chain.stop_chain_updates().await?;
             Ok(())
         })
         .await

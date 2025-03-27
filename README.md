@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Try Out Examples
 
 ```bash 
-cargo run --example chain_query
+cargo run --example chain_query <NODE_SOCKET_PATH>
 ```
 
 <details>
@@ -172,7 +172,7 @@ cargo run --example chain_query
 </details>
 
 ```bash 
-cargo run --example monitor
+cargo run --example monitor <NODE_SOCKET_PATH>
 ```
 
 <details>

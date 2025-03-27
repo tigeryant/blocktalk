@@ -5,7 +5,13 @@ use tokio::task::LocalSet;
 
 #[tokio::main]
 async fn main() -> Result<(), BlockTalkError> {
-    let socket_path = "../bitcoin/datadir_blocktalk/regtest/node.sock";
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        println!("Usage: chain_query <socket_path>");
+        return Ok(());
+    }
+
+    let socket_path = &args[1];
 
     if !check_socket_path(socket_path) {
         return Ok(());

@@ -1,10 +1,9 @@
-use bitcoin::{Transaction, Txid};
 use bitcoin::hashes::Hash;
+use bitcoin::{Transaction, Txid};
 use std::sync::Arc;
 
 use crate::{
-    chain_capnp::chain::Client as ChainClient,
-    proxy_capnp::thread::Client as ThreadClient,
+    chain_capnp::chain::Client as ChainClient, proxy_capnp::thread::Client as ThreadClient,
     BlockTalkError,
 };
 
@@ -53,7 +52,7 @@ impl MempoolInterface for Mempool {
     async fn is_in_mempool(&self, txid: &Txid) -> Result<bool, BlockTalkError> {
         log::debug!("Checking if transaction {} is in mempool", txid);
         let mut req = self.chain_client.is_in_mempool_request();
-        
+
         req.get()
             .get_context()
             .map_err(|e| {
@@ -63,7 +62,7 @@ impl MempoolInterface for Mempool {
             .set_thread(self.thread.clone());
 
         req.get().set_txid(txid.as_ref());
-        
+
         let response = req.send().promise.await.map_err(|e| {
             log::error!("Failed to check mempool status: {}", e);
             BlockTalkError::Connection(e.to_string())
@@ -73,9 +72,12 @@ impl MempoolInterface for Mempool {
     }
 
     async fn has_descendants_in_mempool(&self, txid: &Txid) -> Result<bool, BlockTalkError> {
-        log::debug!("Checking if transaction {} has descendants in mempool", txid);
+        log::debug!(
+            "Checking if transaction {} has descendants in mempool",
+            txid
+        );
         let mut req = self.chain_client.has_descendants_in_mempool_request();
-        
+
         req.get()
             .get_context()
             .map_err(|e| {
@@ -85,7 +87,7 @@ impl MempoolInterface for Mempool {
             .set_thread(self.thread.clone());
 
         req.get().set_txid(txid.as_ref());
-        
+
         let response = req.send().promise.await.map_err(|e| {
             log::error!("Failed to check descendants: {}", e);
             BlockTalkError::Connection(e.to_string())
@@ -102,7 +104,7 @@ impl MempoolInterface for Mempool {
     ) -> Result<(String, bool), BlockTalkError> {
         log::debug!("Broadcasting transaction {}", tx.compute_txid());
         let mut req = self.chain_client.broadcast_transaction_request();
-        
+
         req.get()
             .get_context()
             .map_err(|e| {
@@ -115,14 +117,20 @@ impl MempoolInterface for Mempool {
         params.set_tx(bitcoin::consensus::serialize(tx).as_slice());
         params.set_max_tx_fee(max_tx_fee);
         params.set_relay(relay);
-        
+
         let response = req.send().promise.await.map_err(|e| {
             log::error!("Failed to broadcast transaction: {}", e);
             BlockTalkError::Connection(e.to_string())
         })?;
 
         let result = response.get()?;
-        Ok((result.get_error()?.to_string().map_err(|e| BlockTalkError::Connection(e.to_string()))?, result.get_result()))
+        Ok((
+            result
+                .get_error()?
+                .to_string()
+                .map_err(|e| BlockTalkError::Connection(e.to_string()))?,
+            result.get_result(),
+        ))
     }
 
     async fn get_transaction_ancestry(
@@ -131,7 +139,7 @@ impl MempoolInterface for Mempool {
     ) -> Result<TransactionAncestry, BlockTalkError> {
         log::debug!("Getting ancestry for transaction {}", txid);
         let mut req = self.chain_client.get_transaction_ancestry_request();
-        
+
         req.get()
             .get_context()
             .map_err(|e| {
@@ -141,7 +149,7 @@ impl MempoolInterface for Mempool {
             .set_thread(self.thread.clone());
 
         req.get().set_txid(txid.as_ref());
-        
+
         let response = req.send().promise.await.map_err(|e| {
             log::error!("Failed to get transaction ancestry: {}", e);
             BlockTalkError::Connection(e.to_string())
@@ -164,4 +172,4 @@ impl Mempool {
             thread,
         }
     }
-} 
+}

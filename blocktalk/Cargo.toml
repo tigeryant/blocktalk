@@ -20,6 +20,10 @@ path = "example/monitor.rs"
 name = "chain_query"
 path = "example/chain_query.rs"
 
+[[example]]
+name = "mempool"
+path = "example/mempool.rs"
+
 [dependencies]
 capnp = "0.20.3"
 capnp-rpc = "0.20.3"

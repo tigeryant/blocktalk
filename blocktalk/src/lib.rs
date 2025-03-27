@@ -12,7 +12,7 @@ pub use chain::{Blockchain, ChainInterface};
 pub use connection::{Connection, ConnectionProvider, UnixConnectionProvider};
 pub use error::BlockTalkError;
 pub use generated::*;
-pub use mempool::{Mempool, MempoolInterface};
+pub use mempool::{Mempool, MempoolInterface, TransactionAncestry};
 pub use notification::ChainNotification;
 pub use notification::NotificationHandler;
 
@@ -28,10 +28,17 @@ impl BlockTalk {
         log::info!("Initializing BlockTalk with socket path: {}", socket_path);
         let connection = Connection::connect_default(socket_path).await?;
         let chain = Arc::new(Blockchain::new(connection.clone()));
-        let mempool = Arc::new(Mempool::new(connection.chain_client().clone(), connection.thread().clone()));
+        let mempool = Arc::new(Mempool::new(
+            connection.chain_client().clone(),
+            connection.thread().clone(),
+        ));
         log::info!("BlockTalk initialized successfully");
 
-        Ok(Self { connection, chain, mempool })
+        Ok(Self {
+            connection,
+            chain,
+            mempool,
+        })
     }
 
     pub async fn init_with(
