@@ -17,6 +17,9 @@ pub trait ChainInterface {
     /// Get the current tip block's height and hash
     async fn get_tip(&self) -> Result<(i32, BlockHash), BlockTalkError>;
 
+    /// Get the timestamp of the current chain tip
+    async fn tip_time(&self) -> Result<u32, BlockTalkError>;
+
     /// Get a block at a specific height
     async fn get_block(
         &self,
@@ -26,6 +29,10 @@ pub trait ChainInterface {
 
     /// Get the genesis block (block at height 0)
     async fn get_genesis_block(&self) -> Result<Block, BlockTalkError>;
+
+    /// Check if the node is fully synced
+    /// Returns true if the node is fully synced, false if it's still in initial block download
+    async fn is_synced(&self) -> Result<bool, BlockTalkError>;
 
     /// Check if a block is in the best chain
     async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError>;
@@ -124,6 +131,18 @@ impl ChainInterface for Blockchain {
         Ok((height, hash))
     }
 
+    async fn tip_time(&self) -> Result<u32, BlockTalkError> {
+        log::debug!("Fetching chain tip timestamp");
+        let (_, tip_hash) = self.get_tip().await?;
+        
+        let block = self.get_block_by_hash(&tip_hash).await?
+            .ok_or_else(|| BlockTalkError::chain_error(ChainErrorKind::BlockNotFound, "Tip block not found".to_string()))?;
+        
+        let timestamp = block.header.time;
+        log::debug!("Chain tip timestamp: {}", timestamp);
+        Ok(timestamp)
+    }
+
     async fn get_block(
         &self,
         node_tip_hash: &bitcoin::BlockHash,
@@ -173,6 +192,29 @@ impl ChainInterface for Blockchain {
         log::debug!("Fetching genesis block");
         let (_, tip_hash) = self.get_tip().await?;
         self.get_block(&tip_hash, 0).await
+    }
+
+    async fn is_synced(&self) -> Result<bool, BlockTalkError> {
+        log::debug!("Checking sync status");
+        
+        let mut ibd_req = self.chain_client.is_initial_block_download_request();
+        ibd_req
+            .get()
+            .get_context()
+            .map_err(|e| {
+                log::error!("Failed to get IBD context: {}", e);
+                BlockTalkError::Connection(e.to_string())
+            })?
+            .set_thread(self.thread.clone());
+
+        let ibd_response = ibd_req.send().promise.await.map_err(|e| {
+            log::error!("Failed to check IBD status: {}", e);
+            BlockTalkError::Connection(e.to_string())
+        })?;
+
+        let is_ibd = ibd_response.get()?.get_result();
+        log::debug!("IBD result value: {}", is_ibd);
+        Ok(!is_ibd)
     }
 
     async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError> {
