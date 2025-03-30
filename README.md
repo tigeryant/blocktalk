@@ -131,8 +131,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     local.run_until(async {
         let blocktalk = BlockTalk::init("/path/to/node.sock").await?;
 
-        let block_template_interface = blocktalk.block_template();
-        let template = block_template_interface.get_block_template().await?;
+        let mining_interface = blocktalk.mining();
+        let template = mining_interface.get_block_template().await?;
     }).await;
 ```
 

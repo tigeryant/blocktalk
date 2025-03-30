@@ -6,12 +6,12 @@ mod error;
 mod generated;
 mod mempool;
 mod notification;
-mod block_template;
+mod mining;
 
 pub use bitcoin::BlockHash;
 pub use chain::{Blockchain, ChainInterface};
 pub use connection::{Connection, ConnectionProvider, UnixConnectionProvider};
-pub use block_template::BlockTemplateInterface;
+pub use mining::{MiningInterface, Mining};
 pub use error::BlockTalkError;
 pub use generated::*;
 pub use mempool::{Mempool, MempoolInterface, TransactionAncestry};
@@ -23,7 +23,7 @@ pub struct BlockTalk {
     connection: Arc<Connection>,
     chain: Arc<dyn ChainInterface>,
     mempool: Arc<dyn MempoolInterface>,
-    block_template_interface: BlockTemplateInterface
+    mining: Arc<dyn MiningInterface>
 }
 
 impl BlockTalk {
@@ -35,15 +35,15 @@ impl BlockTalk {
             connection.chain_client().clone(),
             connection.thread().clone(),
         ));
-        let block_template_client = connection.block_template_client();
+        let mining_client = connection.mining_client();
         let thread_client = connection.thread().clone();
-        let block_template_interface = BlockTemplateInterface::new(block_template_client, thread_client);
+        let mining = Arc::new(Mining::new(mining_client, thread_client));
         log::info!("BlockTalk initialized successfully");
 
         Ok(Self {
             connection,
             chain,
-            block_template_interface,
+            mining,
             mempool,
         })
     }
@@ -53,7 +53,7 @@ impl BlockTalk {
         chain_provider: Box<dyn ConnectionProvider>,
         chain_interface: Arc<dyn ChainInterface>,
         mempool_interface: Arc<dyn MempoolInterface>,
-        block_template_interface: BlockTemplateInterface
+        mining_interface: Arc<dyn MiningInterface>
     ) -> Result<Self, BlockTalkError> {
         log::info!(
             "Initializing BlockTalk with socket path: {} and custom provider",
@@ -66,7 +66,7 @@ impl BlockTalk {
             connection,
             chain: chain_interface,
             mempool: mempool_interface,
-            block_template_interface
+            mining: mining_interface
         })
     }
 
@@ -78,8 +78,8 @@ impl BlockTalk {
         &self.mempool
     }
 
-    pub fn block_template(&self) -> &BlockTemplateInterface {
-        &self.block_template_interface
+    pub fn mining(&self) -> &Arc<dyn MiningInterface> {
+        &self.mining
     }
 
     /// Disconnect from the node
