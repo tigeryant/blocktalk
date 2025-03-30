@@ -24,6 +24,9 @@ pub trait ChainInterface {
         height: i32,
     ) -> Result<Block, BlockTalkError>;
 
+    /// Get the genesis block (block at height 0)
+    async fn get_genesis_block(&self) -> Result<Block, BlockTalkError>;
+
     /// Check if a block is in the best chain
     async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError>;
 
@@ -164,6 +167,12 @@ impl ChainInterface for Blockchain {
             log::error!("Failed to decode block at height {}: {}", height, e);
             BlockTalkError::chain_error(ChainErrorKind::DeserializationFailed, e.to_string())
         })
+    }
+
+    async fn get_genesis_block(&self) -> Result<Block, BlockTalkError> {
+        log::debug!("Fetching genesis block");
+        let (_, tip_hash) = self.get_tip().await?;
+        self.get_block(&tip_hash, 0).await
     }
 
     async fn is_in_best_chain(&self, block_hash: &BlockHash) -> Result<bool, BlockTalkError> {
