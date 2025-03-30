@@ -1,18 +1,28 @@
-use crate::mining_capnp::block_template::Client as BlockTemplateClient;
+// use crate::mining_capnp::block_template::Client as BlockTemplateClient;
+use crate::mining_capnp::block_template::Client as MiningClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 
+#[async_trait::async_trait(?Send)]
+pub trait MiningInterface {
+    /// Get a block template
+    async fn get_block_template(&self) -> Result<Vec<u8>, capnp::Error>;
+}
+
 #[derive(Clone)]
-pub struct BlockTemplateInterface {
-    client: BlockTemplateClient,
+pub struct Mining {
+    client: MiningClient,
     thread: ThreadClient,
 }
 
-impl BlockTemplateInterface{
-    pub fn new(client: BlockTemplateClient, thread: ThreadClient) -> Self {
+impl Mining {
+    pub fn new(client: MiningClient, thread: ThreadClient) -> Self {
         Self { client, thread }
     }
+}
 
-    pub async fn get_block_template(&self) -> Result<Vec<u8>, capnp::Error> {
+#[async_trait::async_trait(?Send)]
+impl MiningInterface for Mining {
+    async fn get_block_template(&self) -> Result<Vec<u8>, capnp::Error> {
         log::info!("Retrieving new block template");
         let mut request = self.client.get_block_request();
 

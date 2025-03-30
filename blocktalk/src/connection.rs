@@ -7,7 +7,7 @@ use crate::chain_capnp::chain::Client as ChainClient;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 use crate::BlockTalkError;
-use crate::mining_capnp::block_template::Client as BlockTemplateClient;
+use crate::mining_capnp::block_template::Client as MiningClient;
 
 #[async_trait::async_trait(?Send)]
 pub trait ConnectionProvider: Send + Sync {
@@ -133,7 +133,7 @@ pub struct Connection {
     disconnector: capnp_rpc::Disconnector<twoparty::VatId>,
     thread: ThreadClient,
     chain_client: ChainClient,
-    block_template_client: BlockTemplateClient
+    mining_client: MiningClient
 }
 
 impl Connection {
@@ -149,7 +149,7 @@ impl Connection {
 
         let (thread, chain_client) = provider.create_clients(&init_interface).await?;
 
-        // Set up block template client with thread context
+        // Set up mining client with thread context
         let mut mk_mining_req = init_interface.make_mining_request();
         {
             let mut context = mk_mining_req.get().get_context()?;
@@ -170,8 +170,8 @@ impl Connection {
         }
         let response = create_block_req.send().promise.await?;
 
-        let block_template_client = response.get()?.get_result()?;
-        log::debug!("Block template client established");
+        let mining_client = response.get()?.get_result()?;
+        log::debug!("Mining client established");
 
         log::info!("Connection to node established successfully");
         Ok(Arc::new(Self {
@@ -179,7 +179,7 @@ impl Connection {
             disconnector,
             thread,
             chain_client,
-            block_template_client
+            mining_client
         }))
     }
 
@@ -215,9 +215,8 @@ impl Connection {
         &self.chain_client
     }
 
-    /// Get the mining client
-    pub fn block_template_client(&self) -> BlockTemplateClient {
-        self.block_template_client.clone()
+    pub fn mining_client(&self) -> MiningClient {
+        self.mining_client.clone()
     }
 
     /// Get a reference to the thread client
