@@ -26,7 +26,7 @@ async fn main() -> Result<(), BlockTalkError> {
             };
 
             let chain = blocktalk.chain();
-
+            
             // Execute chain queries
             let tip_info = query_chain_tip(chain.as_ref()).await;
             
@@ -37,6 +37,12 @@ async fn main() -> Result<(), BlockTalkError> {
                     get_block_at_height(chain.as_ref(), &tip_hash, height).await;
                 }
             }
+
+            println!(".");
+            println!(".");
+            println!(".");
+            
+            query_genesis_block(chain.as_ref()).await;
 
             Ok(())
         })
@@ -103,65 +109,86 @@ async fn query_chain_tip(chain: &dyn ChainInterface) -> Option<(i32, BlockHash)>
     }
 }
 
-/// Gets and displays block at specific height using the get_block method
-async fn get_block_at_height(chain: &dyn ChainInterface, tip_hash: &BlockHash, height: i32) {
+/// Pretty prints a block with a custom title
+async fn print_block(block: &bitcoin::Block, title: &str) {
     println!("\n╔═════════════════════════════════════════════════════════════════════════════════╗");
-    println!("║                                   Block Details                                 ║");
+    println!("║ {:^79} ║", title);
     println!("╠═════════════════════════════════════════════════════════════════════════════════╣");
 
-    match tokio::time::timeout(Duration::from_secs(5), chain.get_block(tip_hash, height)).await {
-        Ok(Ok(block)) => {
-            println!("║ Hash         │ {:<64} ║", block.block_hash());
-            println!("╟──────────────┼──────────────────────────────────────────────────────────────────╢");
-            println!("║ Prev Block   │ {:<64} ║", block.header.prev_blockhash);
-            println!("║ Merkle Root  │ {:<64} ║", block.header.merkle_root);
-            println!("║ Timestamp    │ {:<64} ║", block.header.time);
-            println!("║ Nonce        │ {:<64} ║", block.header.nonce);
-            println!("║ TX Count     │ {:<64} ║", block.txdata.len());
-            
-            if !block.txdata.is_empty() {
-                println!("╟──────────────┴──────────────────────────────────────────────────────────────────╢");
-                println!("║                                 Transactions                                    ║");
-                println!("╠═════════════════════════════════════════════════════════════════════════════════╣");
+    println!("║ Hash         │ {:<64} ║", block.block_hash());
+    println!("╟──────────────┼──────────────────────────────────────────────────────────────────╢");
+    println!("║ Prev Block   │ {:<64} ║", block.header.prev_blockhash);
+    println!("║ Merkle Root  │ {:<64} ║", block.header.merkle_root);
+    println!("║ Timestamp    │ {:<64} ║", block.header.time);
+    println!("║ Nonce        │ {:<64} ║", block.header.nonce);
+    println!("║ TX Count     │ {:<64} ║", block.txdata.len());
+    
+    if !block.txdata.is_empty() {
+        println!("╟──────────────┴──────────────────────────────────────────────────────────────────╢");
+        println!("║                                 Transactions                                    ║");
+        println!("╠═════════════════════════════════════════════════════════════════════════════════╣");
 
-                let count = std::cmp::min(3, block.txdata.len());
-                for (i, tx) in block.txdata.iter().take(count).enumerate() {
-                    println!("║ TX #{:<3}                                                                         ║", i + 1);
-                    println!("║ ├─ TXID      │ {:<64} ║", tx.compute_txid());
-                    println!("║ ├─ Inputs    │ {:<64} ║", tx.input.len());
-                    println!("║ ├─ Outputs   │ {:<64} ║", tx.output.len());
+        let count = std::cmp::min(3, block.txdata.len());
+        for (i, tx) in block.txdata.iter().take(count).enumerate() {
+            println!("║ TX #{:<3}                                                                         ║", i + 1);
+            println!("║ ├─ TXID      │ {:<64} ║", tx.compute_txid());
+            println!("║ ├─ Inputs    │ {:<64} ║", tx.input.len());
+            println!("║ ├─ Outputs   │ {:<64} ║", tx.output.len());
 
-                    if !tx.output.is_empty() {
-                        let sample_output = &tx.output[0];
-                        println!(
-                            "║ └─ Sample Out│ {:<64} ║",
-                            format!("{} satoshis", sample_output.value)
-                        );
-                    }
-
-                    if tx.is_coinbase() {
-                        println!("║     [Coinbase Transaction]                                                      ║");
-                    }
-
-                    if i < count - 1 {
-                        println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
-                    }
-                }
-
-                if block.txdata.len() > count {
-                    println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
-                    println!("║ ... and {} more transaction(s)                                                ║", 
-                        block.txdata.len() - count);
-                }
+            if !tx.output.is_empty() {
+                let sample_output = &tx.output[0];
+                println!(
+                    "║ └─ Sample Out│ {:<64} ║",
+                    format!("{} satoshis", sample_output.value)
+                );
             }
 
-            let serialized_size = bitcoin::consensus::serialize(&block).len();
+            if tx.is_coinbase() {
+                println!("║     [Coinbase Transaction]                                                      ║");
+            }
+
+            if i < count - 1 {
+                println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
+            }
+        }
+
+        if block.txdata.len() > count {
             println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
-            println!("║ Block Size   │ {:<64} ║", format!("{} bytes", serialized_size));
-            println!("╚═════════════════════════════════════════════════════════════════════════════════╝");
+            println!("║ ... and {} more transaction(s)                                                ║", 
+                block.txdata.len() - count);
+        }
+    }
+
+    let serialized_size = bitcoin::consensus::serialize(block).len();
+    println!("╟─────────────────────────────────────────────────────────────────────────────────╢");
+    println!("║ Block Size   │ {:<64} ║", format!("{} bytes", serialized_size));
+    println!("╚═════════════════════════════════════════════════════════════════════════════════╝");
+}
+
+/// Gets and displays block at specific height using the get_block method
+async fn get_block_at_height(chain: &dyn ChainInterface, tip_hash: &BlockHash, height: i32) {
+    match tokio::time::timeout(Duration::from_secs(5), chain.get_block(tip_hash, height)).await {
+        Ok(Ok(block)) => {
+            print_block(&block, &format!("Block at Height {}", height)).await;
         }
         Ok(Err(e)) => {
             println!("║ Error fetching block: {:<59} ║", e);
+            println!("╚═════════════════════════════════════════════════════════════════════════════════╝");
+        }
+        Err(_) => {
+            println!("║ Request timed out after 5 seconds                                                ║");
+            println!("╚═════════════════════════════════════════════════════════════════════════════════╝");
+        }
+    }
+}
+
+async fn query_genesis_block(chain: &dyn ChainInterface) {
+    match tokio::time::timeout(Duration::from_secs(5), chain.get_genesis_block()).await {
+        Ok(Ok(block)) => {
+            print_block(&block, "Genesis Block").await;
+        }
+        Ok(Err(e)) => {
+            println!("║ Error fetching genesis block: {:<57} ║", e);
             println!("╚═════════════════════════════════════════════════════════════════════════════════╝");
         }
         Err(_) => {
